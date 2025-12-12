@@ -20,7 +20,11 @@ html, body { height:100%; margin:0; }
 }
 .legend-title{ font-weight:700; margin-bottom:6px; }
 .legend-row{ display:flex; align-items:center; gap:8px; margin:4px 0; }
-.swatch{ width:14px; height:14px; border-radius:3px; border:1px solid rgba(0,0,0,0.2); }
+.swatch{
+  width:14px; height:14px;
+  border-radius:3px;
+  border:1px solid rgba(0,0,0,0.25);
+}
 </style>
 </head>
 
@@ -30,159 +34,179 @@ html, body { height:100%; margin:0; }
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 
-/////////////////////
+//////////////////////////////////////////////////
 // MAPA BASE
-/////////////////////
-var map = L.map('map').setView([-9.2,-75],6);
+//////////////////////////////////////////////////
+var map = L.map('map').setView([-9.2, -75.0], 6);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  attribution:'&copy; OpenStreetMap'
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 
-/////////////////////
+//////////////////////////////////////////////////
 // FUNCIONES DE COLOR
-/////////////////////
-
+//////////////////////////////////////////////////
 function colorByFallecidos(v){
-  if(v>=21) return '#67000d';
-  if(v>=16) return '#a50f15';
-  if(v>=11) return '#de2d26';
-  if(v>=6)  return '#fb6a4a';
-  if(v>=1)  return '#fee5d9';
+  if (v >= 21) return '#67000d';
+  if (v >= 16) return '#a50f15';
+  if (v >= 11) return '#de2d26';
+  if (v >= 6)  return '#fb6a4a';
+  if (v >= 1)  return '#fee5d9';
   return '#cccccc';
 }
 
-function colorByDGL(v){
-  if(v>=4) return '#084081';
-  if(v>=3) return '#0868ac';
-  if(v>=2) return '#2b8cbe';
-  if(v>=1) return '#4eb3d3';
-  return '#a8ddb5';
-}
-
-/////////////////////
-// CONCESIONES (BASE)
-/////////////////////
-var adminColorMap={}, adminColors=['#1f78b4','#33a02c','#e31a1c','#ff7f00','#6a3d9a'];
-
-function colorByAdmin(a){
-  if(!adminColorMap[a]){
-    adminColorMap[a]=adminColors[Object.keys(adminColorMap).length%adminColors.length];
-  }
-  return adminColorMap[a];
-}
-
-var concesionesLayer = L.geoJSON(null,{
-  style:f=>{
-    var a=(f.properties||{}).ADM_VALIDO||'No especificado';
-    return { color:colorByAdmin(a), weight:2, opacity:0.6 };
+//////////////////////////////////////////////////
+// 1. CONCESIONES (BASE)
+//////////////////////////////////////////////////
+var concesionesLayer = L.geoJSON(null, {
+  style: function () {
+    return {
+      color: '#1f78b4',
+      weight: 2,
+      opacity: 0.7
+    };
   },
-  onEachFeature:(f,l)=>{
-    l.bindPopup('<b>Administra:</b> '+((f.properties||{}).ADM_VALIDO||'-'));
+  onEachFeature: function (f, layer) {
+    var p = f.properties || {};
+    layer.bindPopup('<b>Administra:</b> ' + (p.ADM_VALIDO || '-'));
   }
 }).addTo(map);
 
 fetch('data/concesiones.geojson')
-.then(r=>r.json())
-.then(j=>concesionesLayer.addData(j));
+  .then(r => r.json())
+  .then(j => concesionesLayer.addData(j));
 
-/////////////////////
-// CLUSTERS (PUNTOS)
-/////////////////////
-var clusterTotals={};
+//////////////////////////////////////////////////
+// 2. DEPARTAMENTOS (BORDE, SIN LEYENDA)
+//////////////////////////////////////////////////
+var departamentosLayer = L.geoJSON(null, {
+  style: function () {
+    return {
+      color: '#444444',   // gris oscuro
+      weight: 1.5,
+      fill: false,
+      opacity: 0.9
+    };
+  },
+  onEachFeature: function (f, layer) {
+    var p = f.properties || {};
+    layer.bindPopup('<b>Departamento:</b> ' + (p.NOMBDEP || '-'));
+  }
+}).addTo(map);
+
+fetch('data/departamentos.geojson')
+  .then(r => r.json())
+  .then(j => departamentosLayer.addData(j));
+
+//////////////////////////////////////////////////
+// 3. CLUSTERS (PUNTOS – FALLECIDOS POR CLUSTER)
+//////////////////////////////////////////////////
+var clusterTotals = {};
 
 fetch('data/clusters.geojson')
-.then(r=>r.json())
-.then(j=>{
-  j.features.forEach(f=>{
-    var p=f.properties||{};
-    var cid=p.CLUSTER_ID;
-    var v=Number(p.Fallecidos||0);
-    if(!clusterTotals[cid]) clusterTotals[cid]=0;
-    clusterTotals[cid]+=v;
+  .then(r => r.json())
+  .then(j => {
+
+    // Sumar fallecidos por CLUSTER_ID
+    j.features.forEach(f => {
+      var p = f.properties || {};
+      var cid = p.CLUSTER_ID;
+      var v = Number(p.Fallecidos || 0);
+      if (!clusterTotals[cid]) clusterTotals[cid] = 0;
+      clusterTotals[cid] += v;
+    });
+
+    var clustersLayer = L.geoJSON(j, {
+      pointToLayer: function (f, latlng) {
+        var cid = f.properties.CLUSTER_ID;
+        var total = clusterTotals[cid] || 0;
+
+        return L.circleMarker(latlng, {
+          radius: 6,
+          fillColor: colorByFallecidos(total),
+          color: '#111',
+          weight: 1,
+          fillOpacity: 0.75
+        });
+      },
+      onEachFeature: function (f, layer) {
+        var p = f.properties || {};
+        layer.bindPopup(
+          '<b>Cluster:</b> ' + p.CLUSTER_ID + '<br>' +
+          '<b>Fallecidos (cluster):</b> ' + clusterTotals[p.CLUSTER_ID] + '<br>' +
+          '<b>Ruta:</b> ' + (p.cCodRuta || '-') + '<br>' +
+          '<b>Tramo:</b> ' + (p.TRAMO || '-')
+        );
+      }
+    }).addTo(map);
+
+    map.fitBounds(clustersLayer.getBounds(), { padding: [20,20] });
+
+    //////////////////////////////////////////////////
+    // 4. TRAMOS DE ALTA SINIESTRALIDAD (NEGRO, OFF)
+    //////////////////////////////////////////////////
+    var tramosLayer = L.geoJSON(null, {
+      style: function () {
+        return {
+          color: '#000000',
+          weight: 5,
+          opacity: 0.9
+        };
+      },
+      onEachFeature: function (f, layer) {
+        var p = f.properties || {};
+        layer.bindPopup(
+          '<b>Tramo crítico</b><br>' +
+          '<b>DGL:</b> ' + (p.DGL || '-') + '<br>' +
+          '<b>Ruta:</b> ' + (p.cCodRuta || '-')
+        );
+      }
+    });
+
+    fetch('data/tramos-siniestros.geojson')
+      .then(r => r.json())
+      .then(j2 => tramosLayer.addData(j2));
+
+    //////////////////////////////////////////////////
+    // 5. CONTROL DE CAPAS
+    //////////////////////////////////////////////////
+    L.control.layers(null, {
+      'Concesiones (Administra)': concesionesLayer,
+      'Departamentos': departamentosLayer,
+      'Clusters – Fallecidos': clustersLayer,
+      'Tramos críticos (DGL)': tramosLayer
+    }, {
+      collapsed: false
+    }).addTo(map);
+
   });
 
-  var clustersLayer=L.geoJSON(j,{
-    pointToLayer:(f,latlng)=>{
-      var cid=f.properties.CLUSTER_ID;
-      var v=clusterTotals[cid];
-      return L.circleMarker(latlng,{
-        radius:6,
-        fillColor:colorByFallecidos(v),
-        color:'#111',
-        weight:1,
-        fillOpacity:0.75
-      });
-    },
-    onEachFeature:(f,l)=>{
-      var p=f.properties||{};
-      l.bindPopup(
-        '<b>Cluster:</b> '+p.CLUSTER_ID+'<br>'+
-        '<b>Fallecidos (cluster):</b> '+clusterTotals[p.CLUSTER_ID]
-      );
-    }
-  }).addTo(map);
-
-  map.fitBounds(clustersLayer.getBounds(),{padding:[20,20]});
-
-  /////////////////////
-  // TRAMOS (ENCIMA)
-  /////////////////////
-  var tramosLayer=L.geoJSON(null,{
-    style:f=>{
-      var v=Number((f.properties||{}).DGL||0);
-      return { color:colorByDGL(v), weight:5, opacity:0.9 };
-    },
-    onEachFeature:(f,l)=>{
-      l.bindPopup('<b>DGL:</b> '+((f.properties||{}).DGL||'-'));
-    }
-  });
-
-  fetch('data/tramos-siniestros.geojson')
-  .then(r=>r.json())
-  .then(j2=>tramosLayer.addData(j2).addTo(map));
-
-  /////////////////////
-  // CONTROL DE CAPAS
-  /////////////////////
-  L.control.layers(null,{
-    'Concesiones (Administra)': concesionesLayer,
-    'Clusters – Fallecidos': clustersLayer,
-    'Tramos críticos (DGL)': tramosLayer
-  },{collapsed:false}).addTo(map);
-});
-
-/////////////////////
+//////////////////////////////////////////////////
 // LEYENDAS
-/////////////////////
-
-var legendClusters=L.control({position:'bottomright'});
-legendClusters.onAdd=function(){
-  var d=L.DomUtil.create('div','legend');
-  d.innerHTML=
-    '<div class="legend-title">Fallecidos por cluster</div>'+
-    '<div class="legend-row"><span class="swatch" style="background:#fee5d9"></span>1–5</div>'+
-    '<div class="legend-row"><span class="swatch" style="background:#fb6a4a"></span>6–10</div>'+
-    '<div class="legend-row"><span class="swatch" style="background:#de2d26"></span>11–15</div>'+
-    '<div class="legend-row"><span class="swatch" style="background:#a50f15"></span>16–20</div>'+
+//////////////////////////////////////////////////
+var legendClusters = L.control({ position: 'bottomright' });
+legendClusters.onAdd = function () {
+  var div = L.DomUtil.create('div', 'legend');
+  div.innerHTML =
+    '<div class="legend-title">Fallecidos por clúster</div>' +
+    '<div class="legend-row"><span class="swatch" style="background:#fee5d9"></span>1–5</div>' +
+    '<div class="legend-row"><span class="swatch" style="background:#fb6a4a"></span>6–10</div>' +
+    '<div class="legend-row"><span class="swatch" style="background:#de2d26"></span>11–15</div>' +
+    '<div class="legend-row"><span class="swatch" style="background:#a50f15"></span>16–20</div>' +
     '<div class="legend-row"><span class="swatch" style="background:#67000d"></span>≥21</div>';
-  return d;
+  return div;
 };
 legendClusters.addTo(map);
 
-var legendDGL=L.control({position:'bottomleft'});
-legendDGL.onAdd=function(){
-  var d=L.DomUtil.create('div','legend');
-  d.innerHTML=
-    '<div class="legend-title">DGL – Tramos críticos</div>'+
-    '<div class="legend-row"><span class="swatch" style="background:#a8ddb5"></span>0</div>'+
-    '<div class="legend-row"><span class="swatch" style="background:#4eb3d3"></span>1</div>'+
-    '<div class="legend-row"><span class="swatch" style="background:#2b8cbe"></span>2</div>'+
-    '<div class="legend-row"><span class="swatch" style="background:#0868ac"></span>3</div>'+
-    '<div class="legend-row"><span class="swatch" style="background:#084081"></span>≥4</div>';
-  return d;
+var legendTramos = L.control({ position: 'bottomleft' });
+legendTramos.onAdd = function () {
+  var div = L.DomUtil.create('div', 'legend');
+  div.innerHTML =
+    '<div class="legend-title">Tramos críticos</div>' +
+    '<div class="legend-row"><span class="swatch" style="background:#000000"></span>DGL (activable)</div>';
+  return div;
 };
-legendDGL.addTo(map);
+legendTramos.addTo(map);
 
 </script>
 </body>
