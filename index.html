@@ -1,16 +1,30 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <meta charset="utf-8">
-  <title>Prueba Leaflet</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Mapa interactivo – Siniestros fatales RVN</title>
+
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
   <style>
     html, body { height: 100%; margin: 0; }
-    #map { height: 100vh; }
+    #map { height: 100vh; width: 100%; }
+
+    .legend {
+      background: rgba(255,255,255,0.95);
+      padding: 10px 12px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+      font: 12px/1.35 system-ui, Segoe UI, Arial;
+    }
+    .legend-title { font-weight: 700; margin-bottom: 6px; }
+    .legend-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+    .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.2); }
   </style>
 </head>
-<body>
 
+<body>
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -18,9 +32,84 @@
   var map = L.map('map').setView([-9.2, -75.0], 6);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: 'OSM'
+    attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
-</script>
 
+  // ====== COLORES POR Nº DE SINIESTROS ======
+  function colorBySiniestros(v) {
+    if (v >= 20) return '#7f0000';
+    if (v >= 15) return '#b30000';
+    if (v >= 10) return '#e34a33';
+    if (v >= 5)  return '#fc8d59';
+    return '#fee8c8';
+  }
+
+  // ====== CLUSTERS ======
+  var clustersLayer = L.geoJSON(null, {
+    style: function (f) {
+      var p = f.properties || {};
+      var v = Number(p.Siniestros_Total || 0);
+      return { color: colorBySiniestros(v), weight: 5, opacity: 0.95 };
+    },
+    onEachFeature: function (f, layer) {
+      var p = f.properties || {};
+      layer.bindPopup(
+        '<b>Cluster:</b> ' + (p.CLUSTER_ID || '-') + '<br>' +
+        '<b>Tramo:</b> ' + (p.TRAMO || '-') + '<br>' +
+        '<b>Ruta:</b> ' + (p.cCodRuta || '-') + '<br>' +
+        '<b>Siniestros fatales:</b> ' + (p.Siniestros_Total || '-') + '<br>' +
+        '<b>Fallecidos:</b> ' + (p.Fallecidos || '-') + '<br>' +
+        '<b>Longitud (km):</b> ' + (p.Longitud_km || '-') + '<br>' +
+        '<b>Administra:</b> ' + (p.ADM_VALIDO || '-')
+      );
+    }
+  });
+
+  fetch('data/clusters.geojson')
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      clustersLayer.addData(j);
+      clustersLayer.addTo(map);
+      try { map.fitBounds(clustersLayer.getBounds(), { padding: [20,20] }); } catch(e){}
+    });
+
+  // ====== CONCESIONES ======
+  var concesionesLayer = L.geoJSON(null, {
+    style: function(){ return { color:'#1f78b4', weight:2, opacity:0.8 }; },
+    onEachFeature: function(f, layer){
+      var p = f.properties || {};
+      var admin = p.Administra || p.ADM_VALIDO || '-';
+      layer.bindPopup('<b>Administra:</b> ' + admin);
+    }
+  });
+
+  fetch('data/concesiones.geojson')
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      concesionesLayer.addData(j);
+      concesionesLayer.addTo(map);
+    });
+
+  // ====== CONTROL DE CAPAS ======
+  L.control.layers(null, {
+    'Número de siniestros fatales (clusters)': clustersLayer,
+    'Concesiones (Administra)': concesionesLayer
+  }, { collapsed:false }).addTo(map);
+
+  // ====== LEYENDA ======
+  var legend = L.control({ position:'bottomright' });
+  legend.onAdd = function(){
+    var div = L.DomUtil.create('div','legend');
+    div.innerHTML =
+      '<div class="legend-title">Número de siniestros fatales</div>' +
+      '<div class="legend-row"><span class="swatch" style="background:#fee8c8"></span> 1 – 4</div>' +
+      '<div class="legend-row"><span class="swatch" style="background:#fc8d59"></span> 5 – 9</div>' +
+      '<div class="legend-row"><span class="swatch" style="background:#e34a33"></span> 10 – 14</div>' +
+      '<div class="legend-row"><span class="swatch" style="background:#b30000"></span> 15 – 19</div>' +
+      '<div class="legend-row"><span class="swatch" style="background:#7f0000"></span> ≥ 20</div>';
+    return div;
+  };
+  legend.addTo(map);
+</script>
 </body>
 </html>
