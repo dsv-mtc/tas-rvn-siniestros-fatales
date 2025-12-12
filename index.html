@@ -25,6 +25,16 @@ html, body { height:100%; margin:0; }
   border-radius:3px;
   border:1px solid rgba(0,0,0,0.25);
 }
+
+.coord-box input{
+  width:130px;
+  padding:6px;
+  margin-bottom:4px;
+}
+.coord-box button{
+  padding:6px 10px;
+  cursor:pointer;
+}
 </style>
 </head>
 
@@ -44,6 +54,42 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 
 //////////////////////////////////////////////////
+// BUSCADOR POR COORDENADAS
+//////////////////////////////////////////////////
+var coordMarker = null;
+
+var coordControl = L.control({ position: 'topleft' });
+coordControl.onAdd = function () {
+  var div = L.DomUtil.create('div', 'legend coord-box');
+  div.innerHTML =
+    '<div class="legend-title">Ir a coordenadas</div>' +
+    '<input id="latInput" placeholder="Lat (-12.0464)"><br>' +
+    '<input id="lonInput" placeholder="Lon (-77.0428)"><br>' +
+    '<button id="goBtn">Ir</button>';
+
+  L.DomEvent.disableClickPropagation(div);
+  return div;
+};
+coordControl.addTo(map);
+
+setTimeout(function () {
+  document.getElementById('goBtn').onclick = function () {
+    var lat = parseFloat(document.getElementById('latInput').value.replace(',', '.'));
+    var lon = parseFloat(document.getElementById('lonInput').value.replace(',', '.'));
+
+    if (isNaN(lat) || isNaN(lon)) {
+      alert('Ingrese coordenadas válidas');
+      return;
+    }
+    map.setView([lat, lon], 16);
+    if (coordMarker) map.removeLayer(coordMarker);
+    coordMarker = L.marker([lat, lon]).addTo(map)
+      .bindPopup('Lat: ' + lat + '<br>Lon: ' + lon)
+      .openPopup();
+  };
+}, 0);
+
+//////////////////////////////////////////////////
 // FUNCIONES DE COLOR
 //////////////////////////////////////////////////
 function colorByFallecidos(v){
@@ -55,42 +101,65 @@ function colorByFallecidos(v){
   return '#cccccc';
 }
 
+var adminColorMap = {};
+var adminColors = ['#1f78b4','#33a02c','#e31a1c','#ff7f00','#6a3d9a'];
+
+function colorByAdmin(a){
+  if (!adminColorMap[a]) {
+    adminColorMap[a] = adminColors[Object.keys(adminColorMap).length % adminColors.length];
+  }
+  return adminColorMap[a];
+}
+
 //////////////////////////////////////////////////
-// 1. CONCESIONES (BASE)
+// 1. CONCESIONES (BASE + LEYENDA)
 //////////////////////////////////////////////////
 var concesionesLayer = L.geoJSON(null, {
-  style: function () {
-    return {
-      color: '#1f78b4',
-      weight: 2,
-      opacity: 0.7
-    };
+  style: function (f) {
+    var a = (f.properties || {}).ADM_VALIDO || 'No especificado';
+    return { color: colorByAdmin(a), weight: 2, opacity: 0.7 };
   },
   onEachFeature: function (f, layer) {
-    var p = f.properties || {};
-    layer.bindPopup('<b>Administra:</b> ' + (p.ADM_VALIDO || '-'));
+    var a = (f.properties || {}).ADM_VALIDO || '-';
+    layer.bindPopup('<b>Administra:</b> ' + a);
   }
 }).addTo(map);
 
 fetch('data/concesiones.geojson')
   .then(r => r.json())
-  .then(j => concesionesLayer.addData(j));
+  .then(j => {
+    concesionesLayer.addData(j);
+
+    // Leyenda concesiones
+    var legendAdmin = L.control({ position: 'topright' });
+    legendAdmin.onAdd = function () {
+      var div = L.DomUtil.create('div', 'legend');
+      var html = '<div class="legend-title">Concesiones (Administra)</div>';
+      Object.keys(adminColorMap).sort().forEach(function (k) {
+        html += '<div class="legend-row">' +
+                '<span class="swatch" style="background:' + adminColorMap[k] + '"></span>' +
+                k + '</div>';
+      });
+      div.innerHTML = html;
+      return div;
+    };
+    legendAdmin.addTo(map);
+  });
 
 //////////////////////////////////////////////////
-// 2. DEPARTAMENTOS (BORDE, SIN LEYENDA)
+// 2. DEPARTAMENTOS (BORDE)
 //////////////////////////////////////////////////
 var departamentosLayer = L.geoJSON(null, {
   style: function () {
     return {
-      color: '#444444',   // gris oscuro
+      color: '#444444',
       weight: 1.5,
       fill: false,
       opacity: 0.9
     };
   },
   onEachFeature: function (f, layer) {
-    var p = f.properties || {};
-    layer.bindPopup('<b>Departamento:</b> ' + (p.NOMBDEP || '-'));
+    layer.bindPopup('<b>Departamento:</b> ' + ((f.properties || {}).NOMBDEP || '-'));
   }
 }).addTo(map);
 
@@ -99,7 +168,7 @@ fetch('data/departamentos.geojson')
   .then(j => departamentosLayer.addData(j));
 
 //////////////////////////////////////////////////
-// 3. CLUSTERS (PUNTOS – FALLECIDOS POR CLUSTER)
+// 3. CLUSTERS (PUNTOS – FALLECIDOS)
 //////////////////////////////////////////////////
 var clusterTotals = {};
 
@@ -107,8 +176,7 @@ fetch('data/clusters.geojson')
   .then(r => r.json())
   .then(j => {
 
-    // Sumar fallecidos por CLUSTER_ID
-    j.features.forEach(f => {
+    j.features.forEach(function (f) {
       var p = f.properties || {};
       var cid = p.CLUSTER_ID;
       var v = Number(p.Fallecidos || 0);
@@ -118,9 +186,7 @@ fetch('data/clusters.geojson')
 
     var clustersLayer = L.geoJSON(j, {
       pointToLayer: function (f, latlng) {
-        var cid = f.properties.CLUSTER_ID;
-        var total = clusterTotals[cid] || 0;
-
+        var total = clusterTotals[f.properties.CLUSTER_ID] || 0;
         return L.circleMarker(latlng, {
           radius: 6,
           fillColor: colorByFallecidos(total),
@@ -133,9 +199,7 @@ fetch('data/clusters.geojson')
         var p = f.properties || {};
         layer.bindPopup(
           '<b>Cluster:</b> ' + p.CLUSTER_ID + '<br>' +
-          '<b>Fallecidos (cluster):</b> ' + clusterTotals[p.CLUSTER_ID] + '<br>' +
-          '<b>Ruta:</b> ' + (p.cCodRuta || '-') + '<br>' +
-          '<b>Tramo:</b> ' + (p.TRAMO || '-')
+          '<b>Fallecidos (cluster):</b> ' + clusterTotals[p.CLUSTER_ID]
         );
       }
     }).addTo(map);
@@ -143,22 +207,20 @@ fetch('data/clusters.geojson')
     map.fitBounds(clustersLayer.getBounds(), { padding: [20,20] });
 
     //////////////////////////////////////////////////
-    // 4. TRAMOS DE ALTA SINIESTRALIDAD (NEGRO, OFF)
+    // 4. TRAMOS DE ALTA SINIESTRALIDAD (OCRE, OFF)
     //////////////////////////////////////////////////
     var tramosLayer = L.geoJSON(null, {
       style: function () {
         return {
-          color: '#000000',
+          color: '#f4ae18',
           weight: 5,
           opacity: 0.9
         };
       },
       onEachFeature: function (f, layer) {
-        var p = f.properties || {};
         layer.bindPopup(
           '<b>Tramo crítico</b><br>' +
-          '<b>DGL:</b> ' + (p.DGL || '-') + '<br>' +
-          '<b>Ruta:</b> ' + (p.cCodRuta || '-')
+          '<b>DGL:</b> ' + ((f.properties || {}).DGL || '-')
         );
       }
     });
@@ -203,7 +265,7 @@ legendTramos.onAdd = function () {
   var div = L.DomUtil.create('div', 'legend');
   div.innerHTML =
     '<div class="legend-title">Tramos críticos</div>' +
-    '<div class="legend-row"><span class="swatch" style="background:#000000"></span>DGL (activable)</div>';
+    '<div class="legend-row"><span class="swatch" style="background:#f4ae18"></span>DGL (activable)</div>';
   return div;
 };
 legendTramos.addTo(map);
