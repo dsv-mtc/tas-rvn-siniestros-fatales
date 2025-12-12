@@ -1,36 +1,27 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Mapa interactivo – Siniestros fatales RVN</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Mapa interactivo – Siniestros fatales RVN</title>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
-  <style>
-    html, body { height: 100%; margin: 0; }
-    #map { height: 100vh; width: 100%; }
+<style>
+html, body { height:100%; margin:0; }
+#map { height:100vh; width:100%; }
 
-    .legend {
-      background: rgba(255,255,255,0.95);
-      padding: 10px 12px;
-      border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-      font: 12px/1.35 system-ui, Segoe UI, Arial;
-    }
-    .legend-title { font-weight: 700; margin-bottom: 6px; }
-    .legend-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
-    .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.2); }
-
-    .coord-box input {
-      width: 135px;
-      padding: 6px;
-    }
-    .coord-box button {
-      padding: 6px 10px;
-      cursor: pointer;
-    }
-  </style>
+.legend{
+  background:rgba(255,255,255,0.95);
+  padding:10px 12px;
+  border-radius:8px;
+  box-shadow:0 2px 10px rgba(0,0,0,0.15);
+  font:12px/1.35 system-ui, Arial;
+}
+.legend-title{ font-weight:700; margin-bottom:6px; }
+.legend-row{ display:flex; align-items:center; gap:8px; margin:4px 0; }
+.swatch{ width:14px; height:14px; border-radius:3px; border:1px solid rgba(0,0,0,0.2); }
+</style>
 </head>
 
 <body>
@@ -38,170 +29,178 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  // ================= MAPA BASE =================
-  var map = L.map('map').setView([-9.2, -75.0], 6);
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
+var map = L.map('map').setView([-9.2,-75],6);
 
-  // ================= COLORES SINIESTROS =================
-  function colorBySiniestros(v) {
-    if (v >= 20) return '#7f0000';
-    if (v >= 15) return '#b30000';
-    if (v >= 10) return '#e34a33';
-    if (v >= 5)  return '#fc8d59';
-    return '#fee8c8';
-  }
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  attribution:'&copy; OpenStreetMap'
+}).addTo(map);
 
-  // ================= COLORES CONCESIONES =================
-  var adminColorMap = {};
-  var adminColors = [
-    '#1f78b4','#33a02c','#e31a1c','#ff7f00','#6a3d9a',
-    '#b15928','#a6cee3','#b2df8a','#fb9a99','#fdbf6f'
-  ];
+/////////////////////
+// 1. COLORES
+/////////////////////
 
-  function colorByAdmin(admin) {
-    if (!adminColorMap[admin]) {
-      var idx = Object.keys(adminColorMap).length % adminColors.length;
-      adminColorMap[admin] = adminColors[idx];
-    }
-    return adminColorMap[admin];
-  }
+function colorByFallecidos(v){
+  if(v>=20) return '#67000d';
+  if(v>=10) return '#a50f15';
+  if(v>=5)  return '#de2d26';
+  if(v>=2)  return '#fb6a4a';
+  return '#fee5d9';
+}
 
-  // ================= CLUSTERS / SINIESTROS =================
-  var clustersLayer = L.geoJSON(null, {
-    pointToLayer: function (f, latlng) {
-      var p = f.properties || {};
-      var v = Number(p.Siniestros_Total || 0);
+function colorByDGL(v){
+  if(v>=4) return '#084081';
+  if(v>=3) return '#0868ac';
+  if(v>=2) return '#2b8cbe';
+  if(v>=1) return '#4eb3d3';
+  return '#a8ddb5';
+}
 
-      return L.circleMarker(latlng, {
-        radius: 6,
-        fillColor: colorBySiniestros(v),
-        color: '#111',
-        weight: 1,
-        opacity: 0.9,
-        fillOpacity: 0.85
+/////////////////////
+// 2. SINIESTROS (PUNTOS)
+// coloreados por FALLECIDOS agregados por CLUSTER_ID
+/////////////////////
+
+var clusterStats = {};
+
+fetch('data/clusters.geojson')
+.then(r=>r.json())
+.then(j=>{
+  j.features.forEach(f=>{
+    var p=f.properties||{};
+    var cid=p.CLUSTER_ID;
+    var fallecidos=Number(p.Fallecidos||0);
+    if(!clusterStats[cid]) clusterStats[cid]=0;
+    clusterStats[cid]+=fallecidos;
+  });
+
+  var siniestrosLayer=L.geoJSON(j,{
+    pointToLayer:function(f,latlng){
+      var cid=f.properties.CLUSTER_ID;
+      var v=clusterStats[cid]||0;
+      return L.circleMarker(latlng,{
+        radius:6,
+        fillColor:colorByFallecidos(v),
+        color:'#111',
+        weight:1,
+        fillOpacity:0.85
       });
     },
-    style: function (f) {
-      var p = f.properties || {};
-      var v = Number(p.Siniestros_Total || 0);
-      return { color: colorBySiniestros(v), weight: 5, opacity: 0.95 };
-    },
-    onEachFeature: function (f, layer) {
-      var p = f.properties || {};
-      layer.bindPopup(
-        '<b>Cluster:</b> ' + (p.CLUSTER_ID || '-') + '<br>' +
-        '<b>Tramo:</b> ' + (p.TRAMO || '-') + '<br>' +
-        '<b>Ruta:</b> ' + (p.cCodRuta || '-') + '<br>' +
-        '<b>Siniestros fatales:</b> ' + (p.Siniestros_Total || '-') + '<br>' +
-        '<b>Fallecidos:</b> ' + (p.Fallecidos || '-') + '<br>' +
-        '<b>Longitud (km):</b> ' + (p.Longitud_km || '-') + '<br>' +
-        '<b>Administra:</b> ' + (p.ADM_VALIDO || '-')
+    onEachFeature:function(f,l){
+      var p=f.properties||{};
+      l.bindPopup(
+        '<b>Cluster:</b> '+p.CLUSTER_ID+'<br>'+
+        '<b>Fallecidos (cluster):</b> '+clusterStats[p.CLUSTER_ID]+'<br>'+
+        '<b>Tramo:</b> '+(p.TRAMO||'-')+'<br>'+
+        '<b>Ruta:</b> '+(p.cCodRuta||'-')
       );
     }
-  });
+  }).addTo(map);
 
-  fetch('data/clusters.geojson')
-    .then(r => r.json())
-    .then(j => {
-      clustersLayer.addData(j);
-      clustersLayer.addTo(map);
-      try { map.fitBounds(clustersLayer.getBounds(), { padding: [20,20] }); } catch(e){}
-    });
+  map.fitBounds(siniestrosLayer.getBounds(),{padding:[20,20]});
+});
 
-  // ================= CONCESIONES =================
-  var concesionesLayer = L.geoJSON(null, {
-    style: function (f) {
-      var admin = (f.properties || {}).ADM_VALIDO || 'No especificado';
-      return { color: colorByAdmin(admin), weight: 3, opacity: 0.85 };
-    },
-    onEachFeature: function (f, layer) {
-      var admin = (f.properties || {}).ADM_VALIDO || 'No especificado';
-      layer.bindPopup('<b>Administra:</b> ' + admin);
-    }
-  });
+/////////////////////
+// 3. TRAMOS DE ALTA SINIESTRALIDAD (LINEAS)
+// coloreados por DGL
+/////////////////////
 
-  fetch('data/concesiones.geojson')
-    .then(r => r.json())
-    .then(j => {
-      concesionesLayer.addData(j);
-      concesionesLayer.addTo(map);
-
-      // Leyenda concesiones
-      var legendAdmin = L.control({ position: 'bottomleft' });
-      legendAdmin.onAdd = function () {
-        var div = L.DomUtil.create('div', 'legend');
-        var html = '<div class="legend-title">Concesiones (Administra)</div>';
-
-        Object.keys(adminColorMap).sort().forEach(function (k) {
-          html += '<div class="legend-row">' +
-                  '<span class="swatch" style="background:' + adminColorMap[k] + '"></span>' +
-                  k + '</div>';
-        });
-
-        div.innerHTML = html;
-        return div;
-      };
-      legendAdmin.addTo(map);
-    });
-
-  // ================= CONTROL DE CAPAS =================
-  L.control.layers(null, {
-    'Siniestros fatales (clusters)': clustersLayer,
-    'Concesiones (Administra)': concesionesLayer
-  }, { collapsed: false }).addTo(map);
-
-  // ================= LEYENDA SINIESTROS =================
-  var legendS = L.control({ position: 'bottomright' });
-  legendS.onAdd = function () {
-    var div = L.DomUtil.create('div', 'legend');
-    div.innerHTML =
-      '<div class="legend-title">Número de siniestros fatales</div>' +
-      '<div class="legend-row"><span class="swatch" style="background:#fee8c8"></span> 1 – 4</div>' +
-      '<div class="legend-row"><span class="swatch" style="background:#fc8d59"></span> 5 – 9</div>' +
-      '<div class="legend-row"><span class="swatch" style="background:#e34a33"></span> 10 – 14</div>' +
-      '<div class="legend-row"><span class="swatch" style="background:#b30000"></span> 15 – 19</div>' +
-      '<div class="legend-row"><span class="swatch" style="background:#7f0000"></span> ≥ 20</div>';
-    return div;
-  };
-  legendS.addTo(map);
-
-  // ================= BUSCADOR POR COORDENADAS =================
-  var coordMarker = null;
-
-  var coordControl = L.control({ position: 'topleft' });
-  coordControl.onAdd = function () {
-    var div = L.DomUtil.create('div', 'legend coord-box');
-    div.innerHTML =
-      '<div class="legend-title">Ir a coordenadas</div>' +
-      '<input id="latInput" placeholder="Lat (ej: -12.0464)"><br>' +
-      '<input id="lonInput" placeholder="Lon (ej: -77.0428)"><br>' +
-      '<button id="goBtn">Ir</button>';
-
-    L.DomEvent.disableClickPropagation(div);
-    return div;
-  };
-  coordControl.addTo(map);
-
-  setTimeout(function () {
-    document.getElementById('goBtn').onclick = function () {
-      var lat = parseFloat(document.getElementById('latInput').value.replace(',', '.'));
-      var lon = parseFloat(document.getElementById('lonInput').value.replace(',', '.'));
-
-      if (isNaN(lat) || isNaN(lon)) {
-        alert('Ingrese coordenadas válidas');
-        return;
-      }
-
-      map.setView([lat, lon], 16);
-      if (coordMarker) map.removeLayer(coordMarker);
-      coordMarker = L.marker([lat, lon]).addTo(map)
-        .bindPopup('Lat: ' + lat + '<br>Lon: ' + lon)
-        .openPopup();
+var tramosLayer=L.geoJSON(null,{
+  style:function(f){
+    var v=Number((f.properties||{}).DGL||0);
+    return {
+      color:colorByDGL(v),
+      weight:5,
+      opacity:0.9
     };
-  }, 0);
+  },
+  onEachFeature:function(f,l){
+    var p=f.properties||{};
+    l.bindPopup(
+      '<b>Tramo crítico</b><br>'+
+      '<b>DGL:</b> '+(p.DGL||'-')+'<br>'+
+      '<b>Ruta:</b> '+(p.cCodRuta||'-')
+    );
+  }
+});
+
+fetch('data/tramos-siniestros.geojson')
+.then(r=>r.json())
+.then(j=>{
+  tramosLayer.addData(j).addTo(map);
+});
+
+/////////////////////
+// 4. CONCESIONES
+/////////////////////
+
+var adminColorMap={}, adminColors=['#1f78b4','#33a02c','#e31a1c','#ff7f00','#6a3d9a'];
+
+function colorByAdmin(a){
+  if(!adminColorMap[a]){
+    adminColorMap[a]=adminColors[Object.keys(adminColorMap).length%adminColors.length];
+  }
+  return adminColorMap[a];
+}
+
+var concesionesLayer=L.geoJSON(null,{
+  style:f=>{
+    var a=(f.properties||{}).ADM_VALIDO||'No especificado';
+    return {color:colorByAdmin(a),weight:3,opacity:0.8};
+  },
+  onEachFeature:(f,l)=>{
+    var a=(f.properties||{}).ADM_VALIDO||'No especificado';
+    l.bindPopup('<b>Administra:</b> '+a);
+  }
+});
+
+fetch('data/concesiones.geojson')
+.then(r=>r.json())
+.then(j=>{
+  concesionesLayer.addData(j).addTo(map);
+});
+
+/////////////////////
+// 5. CONTROL DE CAPAS
+/////////////////////
+
+L.control.layers(null,{
+  'Siniestros fatales (por cluster)':undefined,
+  'Tramos críticos (DGL)':tramosLayer,
+  'Concesiones (Administra)':concesionesLayer
+},{collapsed:false}).addTo(map);
+
+/////////////////////
+// 6. LEYENDAS
+/////////////////////
+
+var legend1=L.control({position:'bottomright'});
+legend1.onAdd=function(){
+  var d=L.DomUtil.create('div','legend');
+  d.innerHTML=
+    '<div class="legend-title">Fallecidos por cluster</div>'+
+    '<div class="legend-row"><span class="swatch" style="background:#fee5d9"></span>1</div>'+
+    '<div class="legend-row"><span class="swatch" style="background:#fb6a4a"></span>2–4</div>'+
+    '<div class="legend-row"><span class="swatch" style="background:#de2d26"></span>5–9</div>'+
+    '<div class="legend-row"><span class="swatch" style="background:#a50f15"></span>10–19</div>'+
+    '<div class="legend-row"><span class="swatch" style="background:#67000d"></span>≥20</div>';
+  return d;
+};
+legend1.addTo(map);
+
+var legend2=L.control({position:'bottomleft'});
+legend2.onAdd=function(){
+  var d=L.DomUtil.create('div','legend');
+  d.innerHTML=
+    '<div class="legend-title">DGL – Tramos críticos</div>'+
+    '<div class="legend-row"><span class="swatch" style="background:#a8ddb5"></span>0</div>'+
+    '<div class="legend-row"><span class="swatch" style="background:#4eb3d3"></span>1</div>'+
+    '<div class="legend-row"><span class="swatch" style="background:#2b8cbe"></span>2</div>'+
+    '<div class="legend-row"><span class="swatch" style="background:#0868ac"></span>3</div>'+
+    '<div class="legend-row"><span class="swatch" style="background:#084081"></span>≥4</div>';
+  return d;
+};
+legend2.addTo(map);
 
 </script>
 </body>
