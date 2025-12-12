@@ -106,7 +106,8 @@ var adminColors = ['#1f78b4','#33a02c','#e31a1c','#ff7f00','#6a3d9a'];
 
 function colorByAdmin(a){
   if (!adminColorMap[a]) {
-    adminColorMap[a] = adminColors[Object.keys(adminColorMap).length % adminColors.length];
+    var keys = Object.keys(adminColorMap).sort();
+    adminColorMap[a] = adminColors[keys.length % adminColors.length];
   }
   return adminColorMap[a];
 }
@@ -117,7 +118,7 @@ function colorByAdmin(a){
 var concesionesLayer = L.geoJSON(null, {
   style: function (f) {
     var a = (f.properties || {}).ADM_VALIDO || 'No especificado';
-    return { color: colorByAdmin(a), weight: 2, opacity: 0.7 };
+    return { color: colorByAdmin(a), weight: 3, opacity: 0.7 };
   },
   onEachFeature: function (f, layer) {
     var a = (f.properties || {}).ADM_VALIDO || '-';
@@ -134,7 +135,7 @@ fetch('data/concesiones.geojson')
     var legendAdmin = L.control({ position: 'topright' });
     legendAdmin.onAdd = function () {
       var div = L.DomUtil.create('div', 'legend');
-      var html = '<div class="legend-title">Concesiones (Administra)</div>';
+      var html = '<div class="legend-title">Red Vial Nacional - Concesiones</div>';
       Object.keys(adminColorMap).sort().forEach(function (k) {
         html += '<div class="legend-row">' +
                 '<span class="swatch" style="background:' + adminColorMap[k] + '"></span>' +
