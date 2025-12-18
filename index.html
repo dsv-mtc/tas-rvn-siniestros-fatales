@@ -139,30 +139,38 @@ fetch('data/concesiones.geojson')
 
     // Leyenda concesiones
 var legendAdmin = L.control({ position: 'topright' });
-legendAdmin.onAdd = function () {
-  var div = L.DomUtil.create('div', 'legend');
 
-  var html = `
-    <div class="legend-title" style="cursor:pointer" onclick="toggleAdminLegend()">
-      Red Vial Nacional – Concesiones ⬇
-    </div>
-    <div id="adminLegendBody">
-  `;
+legendAdmin.onAdd = function () {
+  var div = L.DomUtil.create('div', 'legend admin-legend');
+
+  var title = L.DomUtil.create('div', 'legend-title', div);
+  title.innerHTML = 'Red Vial Nacional – Concesiones ⬇';
+
+  var body = L.DomUtil.create('div', 'legend-body', div);
 
   Object.keys(adminColorMap).sort().forEach(function (k) {
-    html += `
-      <div class="legend-row">
-        <span class="swatch" style="background:${adminColorMap[k]}"></span>
-        ${k}
-      </div>`;
+    var row = L.DomUtil.create('div', 'legend-row', body);
+    var sw = L.DomUtil.create('span', 'swatch', row);
+    sw.style.background = adminColorMap[k];
+    row.appendChild(document.createTextNode(k));
   });
 
-  html += '</div>';
+  // Estado inicial: visible en desktop, colapsada en móvil
+  if (window.innerWidth < 768) {
+    body.style.display = 'none';
+  }
 
-  div.innerHTML = html;
+  // Evitar que Leaflet capture el click
   L.DomEvent.disableClickPropagation(div);
+
+  // Toggle con click real
+  title.addEventListener('click', function () {
+    body.style.display = (body.style.display === 'none') ? 'block' : 'none';
+  });
+
   return div;
 };
+
 legendAdmin.addTo(map);
   });
 
