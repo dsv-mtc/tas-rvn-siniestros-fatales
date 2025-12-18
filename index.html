@@ -138,19 +138,32 @@ fetch('data/concesiones.geojson')
     concesionesLayer.addData(j);
 
     // Leyenda concesiones
-    var legendAdmin = L.control({ position: 'topright' });
-    legendAdmin.onAdd = function () {
-      var div = L.DomUtil.create('div', 'legend');
-      var html = '<div class="legend-title">Red Vial Nacional - Concesiones</div>';
-      Object.keys(adminColorMap).sort().forEach(function (k) {
-        html += '<div class="legend-row">' +
-                '<span class="swatch" style="background:' + adminColorMap[k] + '"></span>' +
-                k + '</div>';
-      });
-      div.innerHTML = html;
-      return div;
-    };
-    legendAdmin.addTo(map);
+var legendAdmin = L.control({ position: 'topright' });
+legendAdmin.onAdd = function () {
+  var div = L.DomUtil.create('div', 'legend');
+
+  var html = `
+    <div class="legend-title" style="cursor:pointer" onclick="toggleAdminLegend()">
+      Red Vial Nacional – Concesiones ⬇
+    </div>
+    <div id="adminLegendBody">
+  `;
+
+  Object.keys(adminColorMap).sort().forEach(function (k) {
+    html += `
+      <div class="legend-row">
+        <span class="swatch" style="background:${adminColorMap[k]}"></span>
+        ${k}
+      </div>`;
+  });
+
+  html += '</div>';
+
+  div.innerHTML = html;
+  L.DomEvent.disableClickPropagation(div);
+  return div;
+};
+legendAdmin.addTo(map);
   });
 
 //////////////////////////////////////////////////
@@ -280,3 +293,9 @@ legendTramos.addTo(map);
 </script>
 </body>
 </html>
+
+function toggleAdminLegend(){
+  var el = document.getElementById('adminLegendBody');
+  if (!el) return;
+  el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+}
