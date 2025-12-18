@@ -220,7 +220,7 @@ fetch('data/departamentos.geojson')
 // RED VIAL NACIONAL (RVN) – CONTEXTO
 //////////////////////////////////////////////////
 var rvnLayer = L.geoJSON(null, {
-  pane: 'paneRVN'
+  pane: 'paneRVN',
   style: function () {
     return {
       color: '#666666',   // gris medio
@@ -303,9 +303,6 @@ fetch('data/clusters.geojson')
       .then(r => r.json())
       .then(j2 => tramosLayer.addData(j2));
 
-    //////////////////////////////////////////////////
-// 5. CONTROL DE CAPAS
-//////////////////////////////////////////////////
 L.control.layers(null, {
   'Clusters – Fallecidos': clustersLayer,
   'Tramos críticos (DGL)': tramosLayer,
@@ -315,7 +312,6 @@ L.control.layers(null, {
 }, {
   collapsed: false
 }).addTo(map);
-
   });
 
 //////////////////////////////////////////////////
