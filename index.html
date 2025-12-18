@@ -77,7 +77,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 //////////////////////////////////////////////////
 var coordMarker = null;
 
-var coordControl = L.control({ position: 'topleft' });
+var coordControl = L.control({ position: 'bottomleft' });
 coordControl.onAdd = function () {
   var div = L.DomUtil.create('div', 'legend coord-box');
   div.innerHTML =
