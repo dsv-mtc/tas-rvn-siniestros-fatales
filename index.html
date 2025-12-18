@@ -215,6 +215,30 @@ fetch('data/departamentos.geojson')
   .then(j => departamentosLayer.addData(j));
 
 //////////////////////////////////////////////////
+// RED VIAL NACIONAL (RVN) – CONTEXTO
+//////////////////////////////////////////////////
+var rvnLayer = L.geoJSON(null, {
+  style: function () {
+    return {
+      color: '#666666',   // gris medio
+      weight: 2.5,
+      opacity: 0.8
+    };
+  },
+  onEachFeature: function (f, layer) {
+    var p = f.properties || {};
+    layer.bindPopup(
+      '<b>Red Vial Nacional</b><br>' +
+      '<b>Código de ruta:</b> ' + (p.cCodRuta || '-')
+    );
+  }
+}).addTo(map);
+
+fetch('data/red-vial-nacional.geojson')
+  .then(r => r.json())
+  .then(j => rvnLayer.addData(j));
+
+//////////////////////////////////////////////////
 // 3. CLUSTERS (PUNTOS – FALLECIDOS)
 //////////////////////////////////////////////////
 var clusterTotals = {};
@@ -282,6 +306,7 @@ fetch('data/clusters.geojson')
     L.control.layers(null, {
       'Concesiones': concesionesLayer,
       'Departamentos': departamentosLayer,
+      'Red Vial Nacional': rvnLayer,
       'Clusters – Fallecidos': clustersLayer,
       'Tramos críticos (DGL)': tramosLayer
     }, {
