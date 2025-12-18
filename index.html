@@ -304,17 +304,17 @@ fetch('data/clusters.geojson')
       .then(j2 => tramosLayer.addData(j2));
 
     //////////////////////////////////////////////////
-    // 5. CONTROL DE CAPAS
-    //////////////////////////////////////////////////
-    L.control.layers(null, {
-      'Concesiones': concesionesLayer,
-      'Departamentos': departamentosLayer,
-      'Red Vial Nacional': rvnLayer,
-      'Clusters – Fallecidos': clustersLayer,
-      'Tramos críticos (DGL)': tramosLayer
-    }, {
-      collapsed: false
-    }).addTo(map);
+// 5. CONTROL DE CAPAS
+//////////////////////////////////////////////////
+L.control.layers(null, {
+  'Clusters – Fallecidos': clustersLayer,
+  'Tramos críticos (DGL)': tramosLayer,
+  'Concesiones': concesionesLayer,
+  'Red Vial Nacional': rvnLayer,
+  'Departamentos': departamentosLayer
+}, {
+  collapsed: false
+}).addTo(map);
 
   });
 
