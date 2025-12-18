@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
 <!-- Plugins CSS -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet-measure/dist/leaflet-measure.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-polylinemeasure/Leaflet.PolylineMeasure.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.css"/>
 
 <style>
@@ -60,7 +60,7 @@ html, body { height:100%; margin:0; }
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <!-- Plugins JS (después de Leaflet) -->
-<script src="https://unpkg.com/leaflet-measure/dist/leaflet-measure.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-polylinemeasure/Leaflet.PolylineMeasure.css">
 <script src="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.js"></script>
 
 <script>
@@ -69,9 +69,31 @@ html, body { height:100%; margin:0; }
 //////////////////////////////////////////////////
 var map = L.map('map', { zoomControl:true }).setView([-9.2, -75], 6);
 
+// Activar CONTROLES / HERRAMIENTAS
+L.control.polylineMeasure({
+  position: 'topleft',
+  unit: 'metres',
+  showBearings: false,
+  clearMeasurementsOnStop: false,
+  showClearControl: true,
+  tooltipTextFinish: 'Doble clic para terminar',
+  tooltipTextDelete: 'Eliminar',
+  tooltipTextMove: 'Arrastrar punto',
+  tooltipTextAdd: 'Click para agregar punto'
+}).addTo(map);
+
+// Escala dinámica (m / km)
+L.control.scale({
+  position: 'bottomright',
+  metric: true,
+  imperial: false,
+  maxWidth: 150
+}).addTo(map);
+
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
+
 
 //////////////////////////////////////////////////
 // PANES (ORDEN VISUAL)
