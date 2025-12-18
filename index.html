@@ -7,6 +7,10 @@
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
+<!-- Plugins CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet-measure/dist/leaflet-measure.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.css"/>
+
 <style>
 html, body { height:100%; margin:0; }
 #map { height:100vh; width:100%; }
@@ -26,9 +30,9 @@ html, body { height:100%; margin:0; }
   border:1px solid rgba(0,0,0,0.25);
 }
 
-.legend-body {
-  max-height: 240px;
-  overflow-y: auto;
+.legend-body{
+  max-height:240px;
+  overflow-y:auto;
 }
 
 .coord-box input{
@@ -40,56 +44,59 @@ html, body { height:100%; margin:0; }
   padding:6px 10px;
   cursor:pointer;
 }
+.coord-box{ margin-bottom:10px; }
+
 @media (max-width: 768px) {
-
-  /* Todas las leyendas */
-  .legend {
-    max-height: 40vh;
-    overflow-y: auto;
-  }
-
-  /* Empujar un poco hacia arriba */
-  .leaflet-bottom.leaflet-right {
-    bottom: 80px;
-  }
+  .legend { max-height: 40vh; overflow-y:auto; }
+  .leaflet-bottom.leaflet-right { bottom: 80px; }
 }
 </style>
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet-measure/dist/leaflet-measure.css" />
-<script src="https://unpkg.com/leaflet-measure/dist/leaflet-measure.js"></script>
-
 </head>
 
 <body>
 <div id="map"></div>
 
+<!-- Leaflet JS (primero) -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
 
+<!-- Plugins JS (después de Leaflet) -->
+<script src="https://unpkg.com/leaflet-measure/dist/leaflet-measure.js"></script>
+<script src="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.js"></script>
+
+<script>
 //////////////////////////////////////////////////
 // MAPA BASE
 //////////////////////////////////////////////////
-var map = L.map('map', {
-  zoomControl: true
-}).setView([-9.2, -75], 6);
+var map = L.map('map', { zoomControl:true }).setView([-9.2, -75], 6);
 
-// ===============================
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+//////////////////////////////////////////////////
+// PANES (ORDEN VISUAL)
+//////////////////////////////////////////////////
+map.createPane('paneConcesiones');   map.getPane('paneConcesiones').style.zIndex = 200;
+map.createPane('paneDepartamentos'); map.getPane('paneDepartamentos').style.zIndex = 300;
+map.createPane('paneRVN');           map.getPane('paneRVN').style.zIndex = 350;
+map.createPane('paneClusters');      map.getPane('paneClusters').style.zIndex = 450;
+map.createPane('paneTramos');        map.getPane('paneTramos').style.zIndex = 500;
+
+//////////////////////////////////////////////////
 // 📏 HERRAMIENTA DE MEDICIÓN
-// ===============================
+//////////////////////////////////////////////////
 L.control.measure({
   position: 'topleft',
   primaryLengthUnit: 'meters',
-  secondaryLengthUnit: 'kilometers',
-  activeColor: '#e31a1c',
-  completedColor: '#33a02c'
+  secondaryLengthUnit: 'kilometers'
 }).addTo(map);
 
-// ===============================
-// 🗺️ MINI MAPA (opcional)
-// ===============================
+//////////////////////////////////////////////////
+// 🗺️ MINI MAPA (REFERENCIA)
+//////////////////////////////////////////////////
 var miniMapLayer = new L.TileLayer(
   'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-  { minZoom: 0, maxZoom: 13 }
+  { minZoom:0, maxZoom:13 }
 );
 
 new L.Control.MiniMap(miniMapLayer, {
@@ -97,12 +104,6 @@ new L.Control.MiniMap(miniMapLayer, {
   minimized: true,
   position: 'bottomright'
 }).addTo(map);
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap contributors'
-}).addTo(map);
-map.createPane('paneRVN');
-map.getPane('paneRVN').style.zIndex = 350;
 
 //////////////////////////////////////////////////
 // BUSCADOR POR COORDENADAS
@@ -117,17 +118,17 @@ coordControl.onAdd = function () {
     '<input id="latInput" placeholder="Lat (-12.0464)"><br>' +
     '<input id="lonInput" placeholder="Lon (-77.0428)"><br>' +
     '<button id="goBtn">Ir</button>';
-
   L.DomEvent.disableClickPropagation(div);
   return div;
 };
 coordControl.addTo(map);
 
 setTimeout(function () {
-  document.getElementById('goBtn').onclick = function () {
-    var lat = parseFloat(document.getElementById('latInput').value.replace(',', '.'));
-    var lon = parseFloat(document.getElementById('lonInput').value.replace(',', '.'));
-
+  var btn = document.getElementById('goBtn');
+  if (!btn) return;
+  btn.onclick = function () {
+    var lat = parseFloat((document.getElementById('latInput').value || '').replace(',', '.'));
+    var lon = parseFloat((document.getElementById('lonInput').value || '').replace(',', '.'));
     if (isNaN(lat) || isNaN(lon)) {
       alert('Ingrese coordenadas válidas');
       return;
@@ -170,9 +171,10 @@ function colorByAdmin(a){
 }
 
 //////////////////////////////////////////////////
-// 1. CONCESIONES (BASE + LEYENDA)
+// 1. CONCESIONES (BASE + LEYENDA COLAPSABLE)
 //////////////////////////////////////////////////
 var concesionesLayer = L.geoJSON(null, {
+  pane: 'paneConcesiones',
   style: function (f) {
     var a = (f.properties || {}).ADM_VALIDO || 'No especificado';
     return { color: colorByAdmin(a), weight: 4, opacity: 0.7 };
@@ -188,54 +190,41 @@ fetch('data/concesiones.geojson')
   .then(j => {
     concesionesLayer.addData(j);
 
-    // Leyenda concesiones
-var legendAdmin = L.control({ position: 'topright' });
+    var legendAdmin = L.control({ position: 'topright' });
+    legendAdmin.onAdd = function () {
+      var div = L.DomUtil.create('div', 'legend admin-legend');
 
-legendAdmin.onAdd = function () {
-  var div = L.DomUtil.create('div', 'legend admin-legend');
+      var title = L.DomUtil.create('div', 'legend-title', div);
+      title.innerHTML = 'Red Vial Nacional – Concesiones ⬇';
 
-  var title = L.DomUtil.create('div', 'legend-title', div);
-  title.innerHTML = 'Concesiones ⬇ (RVN)';
+      var body = L.DomUtil.create('div', 'legend-body', div);
 
-  var body = L.DomUtil.create('div', 'legend-body', div);
+      Object.keys(adminColorMap).sort().forEach(function (k) {
+        var row = L.DomUtil.create('div', 'legend-row', body);
+        var sw = L.DomUtil.create('span', 'swatch', row);
+        sw.style.background = adminColorMap[k];
+        row.appendChild(document.createTextNode(k));
+      });
 
-  Object.keys(adminColorMap).sort().forEach(function (k) {
-    var row = L.DomUtil.create('div', 'legend-row', body);
-    var sw = L.DomUtil.create('span', 'swatch', row);
-    sw.style.background = adminColorMap[k];
-    row.appendChild(document.createTextNode(k));
-  });
+      if (window.innerWidth < 768) body.style.display = 'none';
 
-  // Estado inicial: visible en desktop, colapsada en móvil
-  if (window.innerWidth < 768) {
-    body.style.display = 'none';
-  }
+      L.DomEvent.disableClickPropagation(div);
+      title.addEventListener('click', function () {
+        body.style.display = (body.style.display === 'none') ? 'block' : 'none';
+      });
 
-  // Evitar que Leaflet capture el click
-  L.DomEvent.disableClickPropagation(div);
-
-  // Toggle con click real
-  title.addEventListener('click', function () {
-    body.style.display = (body.style.display === 'none') ? 'block' : 'none';
-  });
-
-  return div;
-};
-
-legendAdmin.addTo(map);
+      return div;
+    };
+    legendAdmin.addTo(map);
   });
 
 //////////////////////////////////////////////////
 // 2. DEPARTAMENTOS (BORDE)
 //////////////////////////////////////////////////
 var departamentosLayer = L.geoJSON(null, {
+  pane: 'paneDepartamentos',
   style: function () {
-    return {
-      color: '#232323',
-      weight: 1.8,
-      fill: false,
-      opacity: 0.6
-    };
+    return { color:'#232323', weight:1.2, fill:false, opacity:0.6 };
   },
   onEachFeature: function (f, layer) {
     layer.bindPopup('<b>Departamento:</b> ' + ((f.properties || {}).NOMBDEP || '-'));
@@ -247,16 +236,12 @@ fetch('data/departamentos.geojson')
   .then(j => departamentosLayer.addData(j));
 
 //////////////////////////////////////////////////
-// RED VIAL NACIONAL (RVN) – CONTEXTO
+// 3. RED VIAL NACIONAL (RVN) – CONTEXTO
 //////////////////////////////////////////////////
 var rvnLayer = L.geoJSON(null, {
   pane: 'paneRVN',
   style: function () {
-    return {
-      color: '#b0b0b0', 
-      weight: 4,
-      opacity: 0.75
-    };
+    return { color:'#b0b0b0', weight:1.8, opacity:0.8 };
   },
   onEachFeature: function (f, layer) {
     var p = f.properties || {};
@@ -272,7 +257,7 @@ fetch('data/rvn.geojson')
   .then(j => rvnLayer.addData(j));
 
 //////////////////////////////////////////////////
-// 3. CLUSTERS (PUNTOS – FALLECIDOS)
+// 4. CLUSTERS (PUNTOS – FALLECIDOS POR CLUSTER)
 //////////////////////////////////////////////////
 var clusterTotals = {};
 
@@ -289,6 +274,7 @@ fetch('data/clusters.geojson')
     });
 
     var clustersLayer = L.geoJSON(j, {
+      pane: 'paneClusters',
       pointToLayer: function (f, latlng) {
         var total = clusterTotals[f.properties.CLUSTER_ID] || 0;
         return L.circleMarker(latlng, {
@@ -308,18 +294,15 @@ fetch('data/clusters.geojson')
       }
     }).addTo(map);
 
-    map.fitBounds(clustersLayer.getBounds(), { padding: [20,20] });
+    try { map.fitBounds(clustersLayer.getBounds(), { padding:[20,20] }); } catch(e) {}
 
     //////////////////////////////////////////////////
-    // 4. TRAMOS DE ALTA SINIESTRALIDAD (OCRE, OFF)
+    // 5. TRAMOS DE ALTA SINIESTRALIDAD (OCRE, OFF)
     //////////////////////////////////////////////////
     var tramosLayer = L.geoJSON(null, {
+      pane: 'paneTramos',
       style: function () {
-        return {
-          color: '#f4ae18',
-          weight: 5,
-          opacity: 0.9
-        };
+        return { color:'#f4ae18', weight:5, opacity:0.9 };
       },
       onEachFeature: function (f, layer) {
         layer.bindPopup(
@@ -333,19 +316,21 @@ fetch('data/clusters.geojson')
       .then(r => r.json())
       .then(j2 => tramosLayer.addData(j2));
 
-L.control.layers(null, {
-  'Clusters – Fallecidos': clustersLayer,
-  'Tramos críticos (DGL)': tramosLayer,
-  'Concesiones': concesionesLayer,
-  'Red Vial Nacional': rvnLayer,
-  'Departamentos': departamentosLayer
-}, {
-  collapsed: false
-}).addTo(map);
+    //////////////////////////////////////////////////
+    // 6. CONTROL DE CAPAS (orden solicitado)
+    //////////////////////////////////////////////////
+    L.control.layers(null, {
+      'Clusters – Fallecidos': clustersLayer,
+      'Tramos críticos (DGL)': tramosLayer,
+      'Concesiones': concesionesLayer,
+      'Red Vial Nacional': rvnLayer,
+      'Departamentos': departamentosLayer
+    }, { collapsed:false }).addTo(map);
+
   });
 
 //////////////////////////////////////////////////
-// LEYENDAS
+// LEYENDAS FIJAS
 //////////////////////////////////////////////////
 var legendClusters = L.control({ position: 'bottomright' });
 legendClusters.onAdd = function () {
