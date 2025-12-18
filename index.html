@@ -71,6 +71,8 @@ var map = L.map('map').setView([-9.2, -75.0], 6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
+map.createPane('paneRVN');
+map.getPane('paneRVN').style.zIndex = 350;
 
 //////////////////////////////////////////////////
 // BUSCADOR POR COORDENADAS
@@ -218,6 +220,7 @@ fetch('data/departamentos.geojson')
 // RED VIAL NACIONAL (RVN) – CONTEXTO
 //////////////////////////////////////////////////
 var rvnLayer = L.geoJSON(null, {
+  pane: 'paneRVN'
   style: function () {
     return {
       color: '#666666',   // gris medio
@@ -234,7 +237,7 @@ var rvnLayer = L.geoJSON(null, {
   }
 }).addTo(map);
 
-fetch('data/red-vial-nacional.geojson')
+fetch('data/rvn.geojson')
   .then(r => r.json())
   .then(j => rvnLayer.addData(j));
 
