@@ -369,27 +369,42 @@ fetch('data/tramos-siniestros.geojson')
         return { color:'#1f78b4', weight: 5, opacity: 0.9 };
       },
       onEachFeature:function(f, layer){
-        var p = f.properties || {};
-        var dgl = p.DGL ?? '-';
+  var p = f.properties || {};
 
-        // Siniestros (busca varias llaves posibles para no fallar)
-        var sin = n(p.Siniestros_Total ?? p.SINIESTROS ?? p.Siniestros ?? p.N_SIN ?? p.n_siniestros);
-        var fal = n(p.Fallecidos ?? p.FALLECIDOS ?? p.fallecidos);
+  // 🔹 CLUSTER (columna real: CLUSTER_ID, etiqueta visible: "Cluster")
+  var cluster = p.CLUSTER_ID ?? '-';
 
-        // Longitud calculada en el navegador
-        var len = 0;
-        try { len = lineLengthMeters(layer); } catch(e){}
+  // Otros atributos
+  var dgl = p.DGL ?? '-';
 
-        layer.bindTooltip(
-          '<b>Tramos de Alta Siniestralidad</b><br>'+
-          '<b>DGL:</b> ' + dgl + '<br>' +
-          '<b>Siniestros:</b> ' + fmtInt(sin) + '<br>' +
-          '<b>Fallecidos:</b> ' + fmtInt(fal) + '<br>' +
-          '<b>Longitud:</b> ' + fmtM(len),
-          { sticky:true, direction:'top' }
-        );
-      }
-    });
+  var sin = n(
+    p.Siniestros_Total ??
+    p.SINIESTROS ??
+    p.Siniestros ??
+    p.N_SIN ??
+    p.n_siniestros
+  );
+
+  var fal = n(
+    p.Fallecidos ??
+    p.FALLECIDOS ??
+    p.fallecidos
+  );
+
+  // Longitud calculada en el navegador
+  var len = 0;
+  try { len = lineLengthMeters(layer); } catch(e){}
+
+  layer.bindTooltip(
+    '<b>Tramo de Alta Siniestralidad</b><br>' +
+    '<b>Cluster:</b> ' + cluster + '<br>' +   
+    '<b>DGL:</b> ' + dgl + '<br>' +
+    '<b>Siniestros:</b> ' + fmtInt(sin) + '<br>' +
+    '<b>Fallecidos:</b> ' + fmtInt(fal) + '<br>' +
+    '<b>Longitud:</b> ' + fmtM(len),
+    { sticky:true, direction:'top' }
+  );
+}
 
     // OJO: NO lo agregamos al mapa para que quede OFF por defecto.
     // Actualizar control para que apunte al nuevo tramosLayer:
