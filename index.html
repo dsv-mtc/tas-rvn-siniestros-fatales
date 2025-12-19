@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Mapa interactivo – Siniestros fatales RVN</title>
+<title>Mapa interactivo – Tramos de Alta Siniestralidad RVN</title>
 
 <!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
 <!-- Plugins CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.css"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet-measure/dist/leaflet-measure.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.polylinemeasure/Leaflet.PolylineMeasure.css"/>
 
 <style>
 html, body { height:100%; margin:0; }
@@ -54,11 +54,11 @@ html, body { height:100%; margin:0; }
 <!-- JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.js"></script>
-<script src="https://unpkg.com/leaflet-measure/dist/leaflet-measure.js"></script>
+<script src="https://unpkg.com/leaflet.polylinemeasure/Leaflet.PolylineMeasure.js"></script>
 
 <script>
 //////////////////////////////////////////////////
-// HELPERS (errores + números)
+// HELPERS
 //////////////////////////////////////////////////
 function mustOk(r, name){
   if (!r.ok) throw new Error('No se pudo cargar: ' + name + ' (HTTP ' + r.status + ')');
@@ -85,7 +85,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 
 //////////////////////////////////////////////////
-// CONTROLES (escala + minimap + medición)
+// CONTROLES (escala + minimap + medición PolylineMeasure)
 //////////////////////////////////////////////////
 
 // Escala dinámica (m/km)
@@ -107,15 +107,17 @@ new L.Control.MiniMap(miniLayer,{
   position:'bottomright'
 }).addTo(map);
 
-// Medición (estable)
-L.control.measure({
+// Medición (PolylineMeasure)
+L.control.polylineMeasure({
   position: 'topleft',
-  primaryLengthUnit: 'meters',
-  secondaryLengthUnit: 'kilometers',
-  primaryAreaUnit: 'sqmeters',
-  secondaryAreaUnit: 'hectares',
-  activeColor: '#e31a1c',
-  completedColor: '#33a02c'
+  unit: 'metres',
+  showBearings: false,
+  clearMeasurementsOnStop: false,
+  showClearControl: true,
+  tooltipTextFinish: 'Doble clic para terminar',
+  tooltipTextDelete: 'Eliminar',
+  tooltipTextMove: 'Arrastrar punto',
+  tooltipTextAdd: 'Click para agregar punto'
 }).addTo(map);
 
 //////////////////////////////////////////////////
@@ -187,14 +189,12 @@ function colorByAdmin(a){
 }
 
 //////////////////////////////////////////////////
-// LONGITUD DE LÍNEAS (m) sin librerías extra
+// LONGITUD DE LÍNEAS (m)
 //////////////////////////////////////////////////
 function flattenLatLngs(latlngs){
-  // Leaflet puede devolver arrays anidados (MultiLineString)
   if (!Array.isArray(latlngs)) return [];
   if (latlngs.length === 0) return [];
   if (latlngs[0] && typeof latlngs[0].lat === 'number') return latlngs;
-  // anidado
   return latlngs.flatMap(flattenLatLngs);
 }
 function lineLengthMeters(layer){
@@ -207,7 +207,7 @@ function lineLengthMeters(layer){
 }
 
 //////////////////////////////////////////////////
-// CAPAS (se crean VACÍAS para que el check funcione)
+// CAPAS (vacías para que el check funcione)
 //////////////////////////////////////////////////
 
 // Concesiones
@@ -247,19 +247,19 @@ var rvnLayer = L.geoJSON(null,{
   }
 }).addTo(map);
 
-// Clusters (se llenará con fetch)
+// Clusters (vacío; se reemplaza con fetch)
 var clustersLayer = L.geoJSON(null, { pane:'paneClusters' }).addTo(map);
 
-// Tramos críticos (OFF por defecto)
+// Tramos críticos (OFF por defecto) — ahora AZUL
 var tramosLayer = L.geoJSON(null, { pane:'paneTramos' }); // no addTo(map)
 
 //////////////////////////////////////////////////
-// CONTROL DE CAPAS (AHORA sí: check funciona)
+// CONTROL DE CAPAS (check funciona)
 //////////////////////////////////////////////////
 var layerControl = L.control.layers(null,{
-  'Concesiones': concesionesLayer,
   'Clusters – (Fallecidos)': clustersLayer,
-  'Tramos críticos (DGL)': tramosLayer,
+  'Tramos de Alta Siniestralidad': tramosLayer,
+  'Concesiones': concesionesLayer,
   'Red Vial Nacional': rvnLayer,
   'Departamentos': departamentosLayer
 },{ collapsed:false }).addTo(map);
@@ -281,18 +281,19 @@ legendClusters.onAdd = function(){
 };
 legendClusters.addTo(map);
 
+// Leyenda tramos (AHORA AZUL y consistente)
 var legendTramos = L.control({ position:'bottomleft' });
 legendTramos.onAdd = function(){
   var d = L.DomUtil.create('div','legend');
   d.innerHTML =
     '<div class="legend-title" style="cursor:default">Tramos críticos</div>'+
-    '<div class="legend-row"><span class="swatch" style="background:#f4ae18"></span>DGL (activable)</div>';
+    '<div class="legend-row"><span class="swatch" style="background:#1f78b4"></span>Tramos críticos (activable)</div>';
   return d;
 };
 legendTramos.addTo(map);
 
 //////////////////////////////////////////////////
-// CONCESIONES + LEYENDA DESPLEGABLE (desde GeoJSON)
+// CONCESIONES + LEYENDA DESPLEGABLE
 //////////////////////////////////////////////////
 fetch('data/concesiones.geojson')
   .then(r => mustOk(r,'concesiones.geojson'))
@@ -300,14 +301,12 @@ fetch('data/concesiones.geojson')
   .then(geojson => {
     concesionesLayer.addData(geojson);
 
-    // admins únicos + color real del mapa
     var admins = {};
     geojson.features.forEach(f => {
       var a = f.properties?.ADM_VALIDO || 'No especificado';
       admins[a] = colorByAdmin(a);
     });
 
-    // Leyenda desplegable
     var legendAdmin = L.control({ position:'topright' });
     legendAdmin.onAdd = function(){
       var div = L.DomUtil.create('div','legend');
@@ -356,61 +355,79 @@ fetch('data/rvn.geojson')
   .catch(e => alert(e.message));
 
 //////////////////////////////////////////////////
-// TRAMOS CRÍTICOS (OFF por defecto) + hover con longitud
+// TRAMOS CRÍTICOS (OFF por defecto) + hover con siniestros y longitud
 //////////////////////////////////////////////////
 fetch('data/tramos-siniestros.geojson')
   .then(r => mustOk(r,'tramos-siniestros.geojson'))
   .then(r => r.json())
   .then(j => {
-    tramosLayer.addData(j);
 
-    // agregar tooltip con longitud en metros (calculada)
-    tramosLayer.eachLayer(function(layer){
-      try{
-        var p = layer.feature?.properties || {};
+    tramosLayer = L.geoJSON(j,{
+      pane:'paneTramos',
+      style:function(){
+        // Tramos críticos en AZUL (consistente con leyenda)
+        return { color:'#1f78b4', weight: 5, opacity: 0.9 };
+      },
+      onEachFeature:function(f, layer){
+        var p = f.properties || {};
         var dgl = p.DGL ?? '-';
-        var len = lineLengthMeters(layer);
+
+        // Siniestros (busca varias llaves posibles para no fallar)
+        var sin = n(p.Siniestros_Total ?? p.SINIESTROS ?? p.Siniestros ?? p.N_SIN ?? p.n_siniestros);
+        var fal = n(p.Fallecidos ?? p.FALLECIDOS ?? p.fallecidos);
+
+        // Longitud calculada en el navegador
+        var len = 0;
+        try { len = lineLengthMeters(layer); } catch(e){}
+
         layer.bindTooltip(
-          '<b>Tramo crítico</b><br>'+
-          '<b>DGL:</b> '+ dgl + '<br>'+
+          '<b>Tramos de Alta Siniestralidad</b><br>'+
+          '<b>DGL:</b> ' + dgl + '<br>' +
+          '<b>Siniestros:</b> ' + fmtInt(sin) + '<br>' +
+          '<b>Fallecidos:</b> ' + fmtInt(fal) + '<br>' +
           '<b>Longitud:</b> ' + fmtM(len),
           { sticky:true, direction:'top' }
         );
-      } catch(e) {}
+      }
     });
+
+    // OJO: NO lo agregamos al mapa para que quede OFF por defecto.
+    // Actualizar control para que apunte al nuevo tramosLayer:
+    map.removeControl(layerControl);
+    layerControl = L.control.layers(null,{
+      'Clusters – (Fallecidos)': clustersLayer,
+      'Tramos de Alta Siniestralidad': tramosLayer,
+      'Concesiones': concesionesLayer,
+      'Red Vial Nacional': rvnLayer,
+      'Departamentos': departamentosLayer
+    },{ collapsed:false }).addTo(map);
   })
   .catch(e => alert(e.message));
 
 //////////////////////////////////////////////////
-// CLUSTERS: sumar por CLUSTER_ID (Siniestros + Fallecidos) + hover
+// CLUSTERS: sumar por CLUSTER_ID solo FALL. (sin siniestros en tooltip)
 //////////////////////////////////////////////////
 fetch('data/clusters.geojson')
   .then(r => mustOk(r,'clusters.geojson'))
   .then(r => r.json())
   .then(j => {
 
-    // Totales por CLUSTER_ID
-    var totals = {}; // {cid: {fallecidos, siniestros}}
+    // Totales por CLUSTER_ID: solo fallecidos
+    var totals = {};
     j.features.forEach(function(f){
       var p = f.properties || {};
       var cid = p.CLUSTER_ID;
       if (cid == null) return;
 
-      // siniestros: intenta varias columnas típicas
-      var sin = n(p.Siniestros_Total ?? p.SINIESTROS ?? p.Siniestros ?? p.N_SIN ?? p.n_siniestros);
       var fal = n(p.Fallecidos ?? p.FALLECIDOS ?? p.fallecidos);
-
-      if (!totals[cid]) totals[cid] = { fallecidos:0, siniestros:0 };
-      totals[cid].fallecidos += fal;
-      totals[cid].siniestros += sin;
+      totals[cid] = (totals[cid] || 0) + fal;
     });
 
-    // Render de puntos
     clustersLayer = L.geoJSON(j,{
       pane:'paneClusters',
       pointToLayer:function(f, latlng){
         var cid = f.properties?.CLUSTER_ID;
-        var tf = totals[cid]?.fallecidos ?? 0;
+        var tf = totals[cid] ?? 0;
         return L.circleMarker(latlng,{
           radius:6,
           fillColor: colorByFallecidos(tf),
@@ -421,47 +438,31 @@ fetch('data/clusters.geojson')
       },
       onEachFeature:function(f, layer){
         var cid = f.properties?.CLUSTER_ID ?? '-';
-        var tf = totals[cid]?.fallecidos ?? 0;
-        var ts = totals[cid]?.siniestros ?? 0;
+        var tf = totals[cid] ?? 0;
 
-        // tooltip al pasar el cursor
         layer.bindTooltip(
           '<b>Clúster:</b> ' + cid + '<br>' +
-          '<b>Siniestros (clúster):</b> ' + fmtInt(ts) + '<br>' +
           '<b>Fallecidos (clúster):</b> ' + fmtInt(tf),
           { sticky:true, direction:'top' }
         );
       }
-    });
+    }).addTo(map);
 
-    // Reemplazar la capa en el mapa y en el control (para que el check funcione)
-    map.removeLayer(window._clustersLayerOnMap || clustersLayer); // por si acaso
-    window._clustersLayerOnMap = clustersLayer;
-    clustersLayer.addTo(map);
-
-    // Actualizar en el control: quitar overlay anterior y poner el nuevo
-    // (Más seguro: recrear control no; pero aquí basta con actualizar referencia global)
-    // Solución robusta: como el control ya apunta a "clustersLayer" inicial, lo mantenemos:
-    // -> removemos el inicial y dejamos el nuevo bajo el mismo nombre:
-    // Para evitar inconsistencias, removemos el inicial (vacío) si existía:
-    // (No rompe si no existe)
-    try { map.removeLayer(layerControl._layers?.find(x => x.name === 'Clusters – (Fallecidos)')?.layer); } catch(e){}
-
-    // Fit bounds
     try { map.fitBounds(clustersLayer.getBounds(), { padding:[20,20] }); } catch(e){}
 
-    // OJO: el checkbox funcionará con "Clusters – (Fallecidos)" si el overlay apuntaba al objeto inicial.
-    // Para asegurar 100%: recreamos el control una vez que clusters está listo.
+    // refrescar control para que el check controle el nuevo clustersLayer
     map.removeControl(layerControl);
     layerControl = L.control.layers(null,{
-      'Concesiones': concesionesLayer,
       'Clusters – (Fallecidos)': clustersLayer,
-      'Tramos críticos (DGL)': tramosLayer,
+      'Tramos de Alta Siniestralidad': tramosLayer,
+      'Concesiones': concesionesLayer,
       'Red Vial Nacional': rvnLayer,
       'Departamentos': departamentosLayer
     },{ collapsed:false }).addTo(map);
   })
   .catch(e => alert(e.message));
+
 </script>
 </body>
 </html>
+
