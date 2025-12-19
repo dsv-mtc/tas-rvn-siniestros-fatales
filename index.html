@@ -5,11 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Mapa interactivo – Siniestros fatales RVN</title>
 
-<!-- Leaflet CSS (OBLIGATORIO) -->
+<!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
-<!-- MiniMap CSS -->
+<!-- Plugins CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-measure/dist/leaflet-measure.css"/>
 
 <style>
 html, body { height:100%; margin:0; }
@@ -32,7 +33,7 @@ html, body { height:100%; margin:0; }
 .legend-body{ max-height:240px; overflow-y:auto; }
 
 .coord-box input{
-  width:140px;
+  width:150px;
   padding:6px;
   margin-bottom:4px;
 }
@@ -53,8 +54,27 @@ html, body { height:100%; margin:0; }
 <!-- JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.js"></script>
+<script src="https://unpkg.com/leaflet-measure/dist/leaflet-measure.js"></script>
 
 <script>
+//////////////////////////////////////////////////
+// HELPERS (errores + números)
+//////////////////////////////////////////////////
+function mustOk(r, name){
+  if (!r.ok) throw new Error('No se pudo cargar: ' + name + ' (HTTP ' + r.status + ')');
+  return r;
+}
+function n(x){
+  var v = Number(x);
+  return isNaN(v) ? 0 : v;
+}
+function fmtInt(x){
+  return (x ?? 0).toLocaleString('es-PE');
+}
+function fmtM(x){
+  return Math.round(x).toLocaleString('es-PE') + ' m';
+}
+
 //////////////////////////////////////////////////
 // MAPA BASE
 //////////////////////////////////////////////////
@@ -65,15 +85,15 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 
 //////////////////////////////////////////////////
-// CONTROLES
+// CONTROLES (escala + minimap + medición)
 //////////////////////////////////////////////////
 
-// Escala dinámica (m/km según zoom)
+// Escala dinámica (m/km)
 L.control.scale({
   position:'bottomright',
   metric:true,
   imperial:false,
-  maxWidth:150
+  maxWidth:160
 }).addTo(map);
 
 // Mini mapa
@@ -85,6 +105,17 @@ new L.Control.MiniMap(miniLayer,{
   toggleDisplay:true,
   minimized:true,
   position:'bottomright'
+}).addTo(map);
+
+// Medición (estable)
+L.control.measure({
+  position: 'topleft',
+  primaryLengthUnit: 'meters',
+  secondaryLengthUnit: 'kilometers',
+  primaryAreaUnit: 'sqmeters',
+  secondaryAreaUnit: 'hectares',
+  activeColor: '#e31a1c',
+  completedColor: '#33a02c'
 }).addTo(map);
 
 //////////////////////////////////////////////////
@@ -156,7 +187,27 @@ function colorByAdmin(a){
 }
 
 //////////////////////////////////////////////////
-// CAPAS (se crean aquí para el control)
+// LONGITUD DE LÍNEAS (m) sin librerías extra
+//////////////////////////////////////////////////
+function flattenLatLngs(latlngs){
+  // Leaflet puede devolver arrays anidados (MultiLineString)
+  if (!Array.isArray(latlngs)) return [];
+  if (latlngs.length === 0) return [];
+  if (latlngs[0] && typeof latlngs[0].lat === 'number') return latlngs;
+  // anidado
+  return latlngs.flatMap(flattenLatLngs);
+}
+function lineLengthMeters(layer){
+  var latlngs = flattenLatLngs(layer.getLatLngs());
+  var total = 0;
+  for (var i=1; i<latlngs.length; i++){
+    total += map.distance(latlngs[i-1], latlngs[i]);
+  }
+  return total;
+}
+
+//////////////////////////////////////////////////
+// CAPAS (se crean VACÍAS para que el check funcione)
 //////////////////////////////////////////////////
 
 // Concesiones
@@ -168,7 +219,7 @@ var concesionesLayer = L.geoJSON(null,{
   },
   onEachFeature:function(f,l){
     var a = (f.properties || {}).ADM_VALIDO || '-';
-    l.bindPopup('<b>Administra:</b> ' + a);
+    l.bindTooltip('<b>Administra:</b> ' + a, { sticky:true, direction:'top' });
   }
 }).addTo(map);
 
@@ -179,7 +230,8 @@ var departamentosLayer = L.geoJSON(null,{
     return { color:'#232323', weight: 1.2, fill:false, opacity: 0.6 };
   },
   onEachFeature:function(f,l){
-    l.bindPopup('<b>Departamento:</b> ' + ((f.properties||{}).NOMBDEP || '-'));
+    var d = (f.properties||{}).NOMBDEP || '-';
+    l.bindTooltip('<b>Departamento:</b> ' + d, { sticky:true });
   }
 }).addTo(map);
 
@@ -187,157 +239,33 @@ var departamentosLayer = L.geoJSON(null,{
 var rvnLayer = L.geoJSON(null,{
   pane:'paneRVN',
   style:function(){
-    return { color:'#bdbdbd', weight: 1.4, opacity: 0.75 };
+    return { color:'#bdbdbd', weight: 1.3, opacity: 0.75 };
   },
   onEachFeature:function(f,l){
-    l.bindPopup('<b>Código de ruta:</b> ' + ((f.properties||{}).cCodRuta || '-'));
+    var ruta = (f.properties||{}).cCodRuta || '-';
+    l.bindTooltip('<b>RVN</b><br><b>Código de ruta:</b> ' + ruta, { sticky:true });
   }
 }).addTo(map);
 
-// Tramos críticos (apagado por defecto)
-var tramosLayer = L.geoJSON(null,{
-  pane:'paneTramos',
-  style:function(){
-    return { color:'#f4ae18', weight: 5, opacity: 0.9 };
-  },
-  onEachFeature:function(f,l){
-    l.bindPopup('<b>Tramo crítico</b><br><b>DGL:</b> ' + ((f.properties||{}).DGL || '-'));
-  }
-});
-// (NO addTo(map) para que inicie OFF)
-
-// Clusters (se crea luego del fetch porque calcula totales)
+// Clusters (se llenará con fetch)
 var clustersLayer = L.geoJSON(null, { pane:'paneClusters' }).addTo(map);
 
-//////////////////////////////////////////////////
-// FETCH + CARGA DE DATOS
-//////////////////////////////////////////////////
-
-function mustOk(r, name){
-  if (!r.ok) throw new Error('No se pudo cargar: ' + name + ' (HTTP ' + r.status + ')');
-  return r;
-}
-
-// 1) Concesiones + leyenda desplegable (se arma desde el GeoJSON)
-fetch('data/concesiones.geojson')
-  .then(r => mustOk(r, 'concesiones.geojson'))
-  .then(r => r.json())
-  .then(geojson => {
-
-    concesionesLayer.addData(geojson);
-
-    // Construir listado único de administradores con sus colores
-    var admins = {};
-    geojson.features.forEach(f => {
-      var a = f.properties?.ADM_VALIDO || 'No especificado';
-      admins[a] = colorByAdmin(a);
-    });
-
-    // Leyenda desplegable
-    var legendAdmin = L.control({ position: 'topright' });
-    legendAdmin.onAdd = function () {
-      var div = L.DomUtil.create('div', 'legend');
-
-      var title = L.DomUtil.create('div', 'legend-title', div);
-      title.innerHTML = 'Red Vial Nacional – Concesiones ⬇';
-
-      var body = L.DomUtil.create('div', 'legend-body', div);
-
-      Object.keys(admins).sort().forEach(a => {
-        var row = L.DomUtil.create('div', 'legend-row', body);
-        var sw = L.DomUtil.create('span', 'swatch', row);
-        sw.style.background = admins[a];
-        row.appendChild(document.createTextNode(a));
-      });
-
-      // Colapsar por defecto en móvil
-      if (window.innerWidth < 768) body.style.display = 'none';
-
-      // Toggle
-      L.DomEvent.disableClickPropagation(div);
-      title.onclick = () => {
-        body.style.display = (body.style.display === 'none') ? 'block' : 'none';
-      };
-
-      return div;
-    };
-    legendAdmin.addTo(map);
-  })
-  .catch(e => alert(e.message));
-
-// 2) Departamentos
-fetch('data/departamentos.geojson')
-  .then(r => mustOk(r, 'departamentos.geojson'))
-  .then(r => r.json())
-  .then(j => departamentosLayer.addData(j))
-  .catch(e => alert(e.message));
-
-// 3) RVN
-fetch('data/rvn.geojson')
-  .then(r => mustOk(r, 'rvn.geojson'))
-  .then(r => r.json())
-  .then(j => rvnLayer.addData(j))
-  .catch(e => alert(e.message));
-
-// 4) Clusters (sumar Fallecidos por CLUSTER_ID y colorear)
-var clusterTotals = {};
-fetch('data/clusters.geojson')
-  .then(r => mustOk(r, 'clusters.geojson'))
-  .then(r => r.json())
-  .then(j => {
-
-    j.features.forEach(f => {
-      var p = f.properties || {};
-      var cid = p.CLUSTER_ID;
-      var v = Number(p.Fallecidos || 0);
-      clusterTotals[cid] = (clusterTotals[cid] || 0) + v;
-    });
-
-    clustersLayer = L.geoJSON(j,{
-      pane:'paneClusters',
-      pointToLayer: function (f, latlng) {
-        var total = clusterTotals[f.properties.CLUSTER_ID] || 0;
-        return L.circleMarker(latlng,{
-          radius: 6,
-          fillColor: colorByFallecidos(total),
-          color: '#111',
-          weight: 1,
-          fillOpacity: 0.75
-        });
-      },
-      onEachFeature: function (f, layer) {
-        var cid = f.properties.CLUSTER_ID;
-        layer.bindPopup(
-          '<b>Cluster:</b> ' + cid +
-          '<br><b>Fallecidos (cluster):</b> ' + (clusterTotals[cid] || 0)
-        );
-      }
-    }).addTo(map);
-
-    try { map.fitBounds(clustersLayer.getBounds(), { padding:[20,20] }); } catch(e){}
-  })
-  .catch(e => alert(e.message));
-
-// 5) Tramos críticos (cargar, pero queda OFF hasta que el usuario lo active)
-fetch('data/tramos-siniestros.geojson')
-  .then(r => mustOk(r, 'tramos-siniestros.geojson'))
-  .then(r => r.json())
-  .then(j => tramosLayer.addData(j))
-  .catch(e => alert(e.message));
+// Tramos críticos (OFF por defecto)
+var tramosLayer = L.geoJSON(null, { pane:'paneTramos' }); // no addTo(map)
 
 //////////////////////////////////////////////////
-// CONTROL DE CAPAS
+// CONTROL DE CAPAS (AHORA sí: check funciona)
 //////////////////////////////////////////////////
-L.control.layers(null,{
+var layerControl = L.control.layers(null,{
   'Concesiones': concesionesLayer,
-  'Clusters – Fallecidos': clustersLayer,
+  'Clusters – (Fallecidos)': clustersLayer,
   'Tramos críticos (DGL)': tramosLayer,
   'Red Vial Nacional': rvnLayer,
   'Departamentos': departamentosLayer
 },{ collapsed:false }).addTo(map);
 
 //////////////////////////////////////////////////
-// LEYENDA CLUSTERS
+// LEYENDAS (clusters + tramos)
 //////////////////////////////////////////////////
 var legendClusters = L.control({ position:'bottomright' });
 legendClusters.onAdd = function(){
@@ -353,7 +281,6 @@ legendClusters.onAdd = function(){
 };
 legendClusters.addTo(map);
 
-// Leyenda tramos (simple)
 var legendTramos = L.control({ position:'bottomleft' });
 legendTramos.onAdd = function(){
   var d = L.DomUtil.create('div','legend');
@@ -364,6 +291,177 @@ legendTramos.onAdd = function(){
 };
 legendTramos.addTo(map);
 
+//////////////////////////////////////////////////
+// CONCESIONES + LEYENDA DESPLEGABLE (desde GeoJSON)
+//////////////////////////////////////////////////
+fetch('data/concesiones.geojson')
+  .then(r => mustOk(r,'concesiones.geojson'))
+  .then(r => r.json())
+  .then(geojson => {
+    concesionesLayer.addData(geojson);
+
+    // admins únicos + color real del mapa
+    var admins = {};
+    geojson.features.forEach(f => {
+      var a = f.properties?.ADM_VALIDO || 'No especificado';
+      admins[a] = colorByAdmin(a);
+    });
+
+    // Leyenda desplegable
+    var legendAdmin = L.control({ position:'topright' });
+    legendAdmin.onAdd = function(){
+      var div = L.DomUtil.create('div','legend');
+
+      var title = L.DomUtil.create('div','legend-title', div);
+      title.innerHTML = 'Red Vial Nacional – Concesiones ⬇';
+
+      var body = L.DomUtil.create('div','legend-body', div);
+
+      Object.keys(admins).sort().forEach(a => {
+        var row = L.DomUtil.create('div','legend-row', body);
+        var sw = L.DomUtil.create('span','swatch', row);
+        sw.style.background = admins[a];
+        row.appendChild(document.createTextNode(a));
+      });
+
+      if (window.innerWidth < 768) body.style.display = 'none';
+
+      L.DomEvent.disableClickPropagation(div);
+      title.onclick = () => {
+        body.style.display = (body.style.display === 'none') ? 'block' : 'none';
+      };
+
+      return div;
+    };
+    legendAdmin.addTo(map);
+  })
+  .catch(e => alert(e.message));
+
+//////////////////////////////////////////////////
+// DEPARTAMENTOS
+//////////////////////////////////////////////////
+fetch('data/departamentos.geojson')
+  .then(r => mustOk(r,'departamentos.geojson'))
+  .then(r => r.json())
+  .then(j => departamentosLayer.addData(j))
+  .catch(e => alert(e.message));
+
+//////////////////////////////////////////////////
+// RVN
+//////////////////////////////////////////////////
+fetch('data/rvn.geojson')
+  .then(r => mustOk(r,'rvn.geojson'))
+  .then(r => r.json())
+  .then(j => rvnLayer.addData(j))
+  .catch(e => alert(e.message));
+
+//////////////////////////////////////////////////
+// TRAMOS CRÍTICOS (OFF por defecto) + hover con longitud
+//////////////////////////////////////////////////
+fetch('data/tramos-siniestros.geojson')
+  .then(r => mustOk(r,'tramos-siniestros.geojson'))
+  .then(r => r.json())
+  .then(j => {
+    tramosLayer.addData(j);
+
+    // agregar tooltip con longitud en metros (calculada)
+    tramosLayer.eachLayer(function(layer){
+      try{
+        var p = layer.feature?.properties || {};
+        var dgl = p.DGL ?? '-';
+        var len = lineLengthMeters(layer);
+        layer.bindTooltip(
+          '<b>Tramo crítico</b><br>'+
+          '<b>DGL:</b> '+ dgl + '<br>'+
+          '<b>Longitud:</b> ' + fmtM(len),
+          { sticky:true, direction:'top' }
+        );
+      } catch(e) {}
+    });
+  })
+  .catch(e => alert(e.message));
+
+//////////////////////////////////////////////////
+// CLUSTERS: sumar por CLUSTER_ID (Siniestros + Fallecidos) + hover
+//////////////////////////////////////////////////
+fetch('data/clusters.geojson')
+  .then(r => mustOk(r,'clusters.geojson'))
+  .then(r => r.json())
+  .then(j => {
+
+    // Totales por CLUSTER_ID
+    var totals = {}; // {cid: {fallecidos, siniestros}}
+    j.features.forEach(function(f){
+      var p = f.properties || {};
+      var cid = p.CLUSTER_ID;
+      if (cid == null) return;
+
+      // siniestros: intenta varias columnas típicas
+      var sin = n(p.Siniestros_Total ?? p.SINIESTROS ?? p.Siniestros ?? p.N_SIN ?? p.n_siniestros);
+      var fal = n(p.Fallecidos ?? p.FALLECIDOS ?? p.fallecidos);
+
+      if (!totals[cid]) totals[cid] = { fallecidos:0, siniestros:0 };
+      totals[cid].fallecidos += fal;
+      totals[cid].siniestros += sin;
+    });
+
+    // Render de puntos
+    clustersLayer = L.geoJSON(j,{
+      pane:'paneClusters',
+      pointToLayer:function(f, latlng){
+        var cid = f.properties?.CLUSTER_ID;
+        var tf = totals[cid]?.fallecidos ?? 0;
+        return L.circleMarker(latlng,{
+          radius:6,
+          fillColor: colorByFallecidos(tf),
+          color:'#111',
+          weight:1,
+          fillOpacity:0.75
+        });
+      },
+      onEachFeature:function(f, layer){
+        var cid = f.properties?.CLUSTER_ID ?? '-';
+        var tf = totals[cid]?.fallecidos ?? 0;
+        var ts = totals[cid]?.siniestros ?? 0;
+
+        // tooltip al pasar el cursor
+        layer.bindTooltip(
+          '<b>Clúster:</b> ' + cid + '<br>' +
+          '<b>Siniestros (clúster):</b> ' + fmtInt(ts) + '<br>' +
+          '<b>Fallecidos (clúster):</b> ' + fmtInt(tf),
+          { sticky:true, direction:'top' }
+        );
+      }
+    });
+
+    // Reemplazar la capa en el mapa y en el control (para que el check funcione)
+    map.removeLayer(window._clustersLayerOnMap || clustersLayer); // por si acaso
+    window._clustersLayerOnMap = clustersLayer;
+    clustersLayer.addTo(map);
+
+    // Actualizar en el control: quitar overlay anterior y poner el nuevo
+    // (Más seguro: recrear control no; pero aquí basta con actualizar referencia global)
+    // Solución robusta: como el control ya apunta a "clustersLayer" inicial, lo mantenemos:
+    // -> removemos el inicial y dejamos el nuevo bajo el mismo nombre:
+    // Para evitar inconsistencias, removemos el inicial (vacío) si existía:
+    // (No rompe si no existe)
+    try { map.removeLayer(layerControl._layers?.find(x => x.name === 'Clusters – (Fallecidos)')?.layer); } catch(e){}
+
+    // Fit bounds
+    try { map.fitBounds(clustersLayer.getBounds(), { padding:[20,20] }); } catch(e){}
+
+    // OJO: el checkbox funcionará con "Clusters – (Fallecidos)" si el overlay apuntaba al objeto inicial.
+    // Para asegurar 100%: recreamos el control una vez que clusters está listo.
+    map.removeControl(layerControl);
+    layerControl = L.control.layers(null,{
+      'Concesiones': concesionesLayer,
+      'Clusters – (Fallecidos)': clustersLayer,
+      'Tramos críticos (DGL)': tramosLayer,
+      'Red Vial Nacional': rvnLayer,
+      'Departamentos': departamentosLayer
+    },{ collapsed:false }).addTo(map);
+  })
+  .catch(e => alert(e.message));
 </script>
 </body>
 </html>
