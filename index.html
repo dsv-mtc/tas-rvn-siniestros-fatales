@@ -42,6 +42,18 @@ html, body { height:100%; margin:0; }
   cursor:pointer;
 }
 
+.tool-box input{
+  width:160px;
+  padding:6px;
+  margin:4px 0;
+}
+.tool-box button{
+  padding:6px 10px;
+  cursor:pointer;
+  margin:2px 0;
+  width:100%;
+}
+
 @media (max-width:768px){
   .legend{ max-height:40vh; overflow-y:auto; }
 }
@@ -55,6 +67,9 @@ html, body { height:100%; margin:0; }
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.js"></script>
 <script src="https://unpkg.com/leaflet.polylinemeasure/Leaflet.PolylineMeasure.js"></script>
+
+<!-- Para exportar imagen -->
+<script src="https://unpkg.com/leaflet-simple-map-screenshoter"></script>
 
 <script>
 //////////////////////////////////////////////////
@@ -80,15 +95,13 @@ function fmtM(x){
 //////////////////////////////////////////////////
 var map = L.map('map').setView([-9.2, -75], 6);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution:'&copy; OpenStreetMap contributors'
 }).addTo(map);
 
 //////////////////////////////////////////////////
 // CONTROLES (escala + minimap + medición PolylineMeasure)
 //////////////////////////////////////////////////
-
-// Escala dinámica (m/km)
 L.control.scale({
   position:'bottomright',
   metric:true,
@@ -96,7 +109,6 @@ L.control.scale({
   maxWidth:160
 }).addTo(map);
 
-// Mini mapa
 var miniLayer = new L.TileLayer(
   'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
   { minZoom:0, maxZoom:13 }
@@ -107,7 +119,6 @@ new L.Control.MiniMap(miniLayer,{
   position:'bottomright'
 }).addTo(map);
 
-// Medición (PolylineMeasure)
 L.control.polylineMeasure({
   position: 'topleft',
   unit: 'metres',
@@ -118,6 +129,17 @@ L.control.polylineMeasure({
   tooltipTextDelete: 'Eliminar',
   tooltipTextMove: 'Arrastrar punto',
   tooltipTextAdd: 'Click para agregar punto'
+}).addTo(map);
+
+//////////////////////////////////////////////////
+// EXPORTAR IMAGEN (PNG)
+//////////////////////////////////////////////////
+var screenshoter = L.simpleMapScreenshoter({
+  hidden: false,
+  position: 'topleft',
+  screenName: function(){ return 'Mapa_RVN_Tramos_Alta_Siniestralidad'; },
+  hideElementsWithSelectors: ['.leaflet-control-layers', '.legend'], // para que no tape el mapa (ajustable)
+  mimeType: 'image/png'
 }).addTo(map);
 
 //////////////////////////////////////////////////
@@ -207,10 +229,8 @@ function lineLengthMeters(layer){
 }
 
 //////////////////////////////////////////////////
-// CAPAS (vacías para que el check funcione)
+// CAPAS BASE
 //////////////////////////////////////////////////
-
-// Concesiones
 var concesionesLayer = L.geoJSON(null,{
   pane:'paneConcesiones',
   style:function(f){
@@ -223,7 +243,6 @@ var concesionesLayer = L.geoJSON(null,{
   }
 }).addTo(map);
 
-// Departamentos
 var departamentosLayer = L.geoJSON(null,{
   pane:'paneDepartamentos',
   style:function(){
@@ -235,7 +254,6 @@ var departamentosLayer = L.geoJSON(null,{
   }
 }).addTo(map);
 
-// RVN
 var rvnLayer = L.geoJSON(null,{
   pane:'paneRVN',
   style:function(){
@@ -247,14 +265,14 @@ var rvnLayer = L.geoJSON(null,{
   }
 }).addTo(map);
 
-// Clusters (vacío; se reemplaza con fetch)
+//////////////////////////////////////////////////
+// CAPAS CLAVE (se rellenan por fetch)
+//////////////////////////////////////////////////
 var clustersLayer = L.geoJSON(null, { pane:'paneClusters' }).addTo(map);
-
-// Tramos críticos (OFF por defecto) — ahora AZUL
-var tramosLayer = L.geoJSON(null, { pane:'paneTramos' }); // no addTo(map)
+var tramosLayer   = L.geoJSON(null, { pane:'paneTramos' }); // OFF por defecto
 
 //////////////////////////////////////////////////
-// CONTROL DE CAPAS (check funciona)
+// CONTROL DE CAPAS
 //////////////////////////////////////////////////
 var layerControl = L.control.layers(null,{
   'Clusters – (Fallecidos)': clustersLayer,
@@ -265,7 +283,7 @@ var layerControl = L.control.layers(null,{
 },{ collapsed:false }).addTo(map);
 
 //////////////////////////////////////////////////
-// LEYENDAS (clusters + tramos)
+// LEYENDAS
 //////////////////////////////////////////////////
 var legendClusters = L.control({ position:'bottomright' });
 legendClusters.onAdd = function(){
@@ -281,19 +299,204 @@ legendClusters.onAdd = function(){
 };
 legendClusters.addTo(map);
 
-// Leyenda tramos (AHORA AZUL y consistente)
 var legendTramos = L.control({ position:'bottomleft' });
 legendTramos.onAdd = function(){
   var d = L.DomUtil.create('div','legend');
   d.innerHTML =
-    '<div class="legend-title" style="cursor:default">Tramos críticos</div>'+
-    '<div class="legend-row"><span class="swatch" style="background:#1f78b4"></span>Tramos críticos (activable)</div>';
+    '<div class="legend-title" style="cursor:default">Tramos de Alta Siniestralidad</div>'+
+    '<div class="legend-row"><span class="swatch" style="background:#1f78b4"></span>Tramos (activable)</div>';
   return d;
 };
 legendTramos.addTo(map);
 
 //////////////////////////////////////////////////
-// CONCESIONES + LEYENDA DESPLEGABLE
+// NUEVO: UI (Filtro Cluster + Export CSV)
+//////////////////////////////////////////////////
+var toolControl = L.control({ position:'topleft' });
+toolControl.onAdd = function(){
+  var div = L.DomUtil.create('div','legend tool-box');
+  div.innerHTML =
+    '<div class="legend-title" style="cursor:default">Herramientas</div>'+
+    '<input id="clusterInput" placeholder="Cluster ID (ej: 12)"/>'+
+    '<button id="btnFilter">Filtrar / Enfocar</button>'+
+    '<button id="btnClear">Limpiar resaltado</button>'+
+    '<button id="btnCSV">Exportar resumen (CSV)</button>'+
+    '<small style="display:block;opacity:.75;margin-top:6px;">Tip: al pasar sobre un punto, se resaltan sus tramos.</small>';
+  L.DomEvent.disableClickPropagation(div);
+  return div;
+};
+toolControl.addTo(map);
+
+//////////////////////////////////////////////////
+// ESTADO GLOBAL para interacciones
+//////////////////////////////////////////////////
+var clusterTotals = {};     // {cid:{fallecidos,sum}}
+var tramosIndex   = {};     // {cid:[layer,layer]}
+var clusterPoints = {};     // {cid:[layer,layer]} (si hay varios puntos por cluster)
+var lastHighlight = { cid:null, autoEnabledTramos:false };
+
+function isTramosVisible(){
+  return map.hasLayer(tramosLayer);
+}
+
+function highlightCluster(cid, opts){
+  opts = opts || {};
+  if (!cid) return;
+
+  // auto-activar tramos si se pide (para hover)
+  var autoEnable = !!opts.autoEnableTramos;
+  var wasVisible = isTramosVisible();
+  if (autoEnable && !wasVisible){
+    tramosLayer.addTo(map);
+    lastHighlight.autoEnabledTramos = true;
+  } else {
+    lastHighlight.autoEnabledTramos = false;
+  }
+
+  // limpiar anterior
+  clearHighlight(false);
+
+  lastHighlight.cid = String(cid);
+
+  // resaltar tramos del cluster
+  var arr = tramosIndex[String(cid)] || [];
+  arr.forEach(function(l){
+    l.setStyle({ color:'#004a99', weight: 8, opacity: 1.0 }); // resaltado fuerte
+    if (l.bringToFront) l.bringToFront();
+  });
+
+  // resaltar puntos de cluster
+  var pts = clusterPoints[String(cid)] || [];
+  pts.forEach(function(p){
+    p.setStyle({ radius: 9, weight: 2, color:'#000', fillOpacity: 0.95 });
+    if (p.bringToFront) p.bringToFront();
+  });
+}
+
+function clearHighlight(removeAutoTramos){
+  // revertir estilos de tramos
+  if (lastHighlight.cid){
+    var arr = tramosIndex[lastHighlight.cid] || [];
+    arr.forEach(function(l){
+      // volver estilo base
+      l.setStyle({ color:'#1f78b4', weight: 5, opacity: 0.9 });
+    });
+
+    // revertir puntos
+    var pts = clusterPoints[lastHighlight.cid] || [];
+    pts.forEach(function(p){
+      var cid = p.feature?.properties?.CLUSTER_ID;
+      var tf = clusterTotals[cid]?.fallecidos ?? 0;
+      p.setStyle({
+        radius: 6,
+        fillColor: colorByFallecidos(tf),
+        color:'#111',
+        weight:1,
+        fillOpacity:0.75
+      });
+    });
+  }
+
+  // si se auto-activaron tramos por hover, volver a apagarlos
+  if (removeAutoTramos && lastHighlight.autoEnabledTramos && map.hasLayer(tramosLayer)){
+    map.removeLayer(tramosLayer);
+  }
+
+  lastHighlight = { cid:null, autoEnabledTramos:false };
+}
+
+//////////////////////////////////////////////////
+// EXPORT CSV (resumen)
+//////////////////////////////////////////////////
+function downloadText(filename, text){
+  var blob = new Blob([text], {type:'text/csv;charset=utf-8;'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportSummaryCSV(){
+  // arma resumen por cluster: fallecidos (desde clusters), #tramos y longitud (desde tramos)
+  var rows = [];
+  rows.push(['CLUSTER_ID','Fallecidos_cluster','N_tramos','Longitud_tramos_m'].join(','));
+
+  var allCids = new Set([
+    ...Object.keys(clusterTotals),
+    ...Object.keys(tramosIndex)
+  ]);
+
+  Array.from(allCids).sort((a,b)=> (Number(a)-Number(b))).forEach(function(cid){
+    var f = clusterTotals[cid]?.fallecidos ?? 0;
+    var tr = tramosIndex[cid] || [];
+    var ntr = tr.length;
+
+    var len = 0;
+    tr.forEach(function(l){
+      try { len += lineLengthMeters(l); } catch(e){}
+    });
+
+    rows.push([cid, f, ntr, Math.round(len)].join(','));
+  });
+
+  downloadText('resumen_clusters_tramos.csv', rows.join('\n'));
+}
+
+//////////////////////////////////////////////////
+// EVENTOS UI
+//////////////////////////////////////////////////
+setTimeout(function(){
+  var btnFilter = document.getElementById('btnFilter');
+  var btnClear  = document.getElementById('btnClear');
+  var btnCSV    = document.getElementById('btnCSV');
+  var input     = document.getElementById('clusterInput');
+
+  if (btnFilter){
+    btnFilter.onclick = function(){
+      var cid = (input?.value || '').trim();
+      if (!cid) { alert('Ingrese un Cluster ID'); return; }
+
+      // asegurar que tramos estén visibles cuando filtro
+      if (!map.hasLayer(tramosLayer)) tramosLayer.addTo(map);
+
+      highlightCluster(cid, { autoEnableTramos:false });
+
+      // enfocar: si hay puntos del cluster, usa bounds; si no, usa tramos
+      var pts = clusterPoints[cid] || [];
+      if (pts.length){
+        var g = L.featureGroup(pts);
+        try { map.fitBounds(g.getBounds(), { padding:[30,30] }); } catch(e){}
+      } else {
+        var tr = tramosIndex[cid] || [];
+        if (tr.length){
+          var g2 = L.featureGroup(tr);
+          try { map.fitBounds(g2.getBounds(), { padding:[30,30] }); } catch(e){}
+        } else {
+          alert('No se encontró el Cluster ID en capas cargadas.');
+        }
+      }
+    };
+  }
+
+  if (btnClear){
+    btnClear.onclick = function(){
+      clearHighlight(false);
+    };
+  }
+
+  if (btnCSV){
+    btnCSV.onclick = function(){
+      exportSummaryCSV();
+    };
+  }
+}, 0);
+
+//////////////////////////////////////////////////
+// CARGAS: concesiones / departamentos / rvn
 //////////////////////////////////////////////////
 fetch('data/concesiones.geojson')
   .then(r => mustOk(r,'concesiones.geojson'))
@@ -310,12 +513,10 @@ fetch('data/concesiones.geojson')
     var legendAdmin = L.control({ position:'topright' });
     legendAdmin.onAdd = function(){
       var div = L.DomUtil.create('div','legend');
-
       var title = L.DomUtil.create('div','legend-title', div);
       title.innerHTML = 'Red Vial Nacional – Concesiones ⬇';
 
       var body = L.DomUtil.create('div','legend-body', div);
-
       Object.keys(admins).sort().forEach(a => {
         var row = L.DomUtil.create('div','legend-row', body);
         var sw = L.DomUtil.create('span','swatch', row);
@@ -324,30 +525,20 @@ fetch('data/concesiones.geojson')
       });
 
       if (window.innerWidth < 768) body.style.display = 'none';
-
       L.DomEvent.disableClickPropagation(div);
-      title.onclick = () => {
-        body.style.display = (body.style.display === 'none') ? 'block' : 'none';
-      };
-
+      title.onclick = () => body.style.display = (body.style.display === 'none') ? 'block' : 'none';
       return div;
     };
     legendAdmin.addTo(map);
   })
   .catch(e => alert(e.message));
 
-//////////////////////////////////////////////////
-// DEPARTAMENTOS
-//////////////////////////////////////////////////
 fetch('data/departamentos.geojson')
   .then(r => mustOk(r,'departamentos.geojson'))
   .then(r => r.json())
   .then(j => departamentosLayer.addData(j))
   .catch(e => alert(e.message));
 
-//////////////////////////////////////////////////
-// RVN
-//////////////////////////////////////////////////
 fetch('data/rvn.geojson')
   .then(r => mustOk(r,'rvn.geojson'))
   .then(r => r.json())
@@ -355,59 +546,45 @@ fetch('data/rvn.geojson')
   .catch(e => alert(e.message));
 
 //////////////////////////////////////////////////
-// TRAMOS CRÍTICOS (OFF por defecto) + hover con siniestros y longitud
+// CARGA TRAMOS (OFF por defecto) + índice por CLUSTER_ID
 //////////////////////////////////////////////////
 fetch('data/tramos-siniestros.geojson')
   .then(r => mustOk(r,'tramos-siniestros.geojson'))
   .then(r => r.json())
   .then(j => {
-
     tramosLayer = L.geoJSON(j,{
       pane:'paneTramos',
-      style:function(){
-        // Tramos críticos en AZUL (consistente con leyenda)
-        return { color:'#1f78b4', weight: 5, opacity: 0.9 };
-      },
+      style:function(){ return { color:'#1f78b4', weight: 5, opacity: 0.9 }; },
       onEachFeature:function(f, layer){
-  var p = f.properties || {};
+        var p = f.properties || {};
+        var cluster = p.CLUSTER_ID ?? '-';
+        var dgl = p.DGL ?? '-';
 
-  // 🔹 CLUSTER (columna real: CLUSTER_ID, etiqueta visible: "Cluster")
-  var cluster = p.CLUSTER_ID ?? '-';
+        // siniestros / fallecidos (si existen en tramos)
+        var sin = n(p.Siniestros_Total ?? p.SINIESTROS ?? p.Siniestros ?? p.N_SIN ?? p.n_siniestros);
+        var fal = n(p.Fallecidos ?? p.FALLECIDOS ?? p.fallecidos);
 
-  // Otros atributos
-  var dgl = p.DGL ?? '-';
+        var len = 0;
+        try { len = lineLengthMeters(layer); } catch(e){}
 
-  var sin = n(
-    p.Siniestros_Total ??
-    p.SINIESTROS ??
-    p.Siniestros ??
-    p.N_SIN ??
-    p.n_siniestros
-  );
+        // index para resaltar por cluster
+        var key = String(cluster);
+        if (!tramosIndex[key]) tramosIndex[key] = [];
+        tramosIndex[key].push(layer);
 
-  var fal = n(
-    p.Fallecidos ??
-    p.FALLECIDOS ??
-    p.fallecidos
-  );
+        layer.bindTooltip(
+          '<b>Tramo de Alta Siniestralidad</b><br>' +
+          '<b>Cluster:</b> ' + key + '<br>' +
+          '<b>DGL:</b> ' + dgl + '<br>' +
+          '<b>Siniestros:</b> ' + fmtInt(sin) + '<br>' +
+          '<b>Fallecidos:</b> ' + fmtInt(fal) + '<br>' +
+          '<b>Longitud:</b> ' + fmtM(len),
+          { sticky:true, direction:'top' }
+        );
+      }
+    });
 
-  // Longitud calculada en el navegador
-  var len = 0;
-  try { len = lineLengthMeters(layer); } catch(e){}
-
-  layer.bindTooltip(
-    '<b>Tramo de Alta Siniestralidad</b><br>' +
-    '<b>Cluster:</b> ' + cluster + '<br>' +   
-    '<b>DGL:</b> ' + dgl + '<br>' +
-    '<b>Siniestros:</b> ' + fmtInt(sin) + '<br>' +
-    '<b>Fallecidos:</b> ' + fmtInt(fal) + '<br>' +
-    '<b>Longitud:</b> ' + fmtM(len),
-    { sticky:true, direction:'top' }
-  );
-}
-
-    // OJO: NO lo agregamos al mapa para que quede OFF por defecto.
-    // Actualizar control para que apunte al nuevo tramosLayer:
+    // refrescar control para que apunte al nuevo tramosLayer (sigue OFF por defecto)
     map.removeControl(layerControl);
     layerControl = L.control.layers(null,{
       'Clusters – (Fallecidos)': clustersLayer,
@@ -420,29 +597,28 @@ fetch('data/tramos-siniestros.geojson')
   .catch(e => alert(e.message));
 
 //////////////////////////////////////////////////
-// CLUSTERS: sumar por CLUSTER_ID solo FALL. (sin siniestros en tooltip)
+// CARGA CLUSTERS + hover que resalta tramos
 //////////////////////////////////////////////////
 fetch('data/clusters.geojson')
   .then(r => mustOk(r,'clusters.geojson'))
   .then(r => r.json())
   .then(j => {
-
-    // Totales por CLUSTER_ID: solo fallecidos
-    var totals = {};
+    // Totales por CLUSTER_ID (fallecidos)
+    clusterTotals = {};
     j.features.forEach(function(f){
       var p = f.properties || {};
       var cid = p.CLUSTER_ID;
       if (cid == null) return;
-
       var fal = n(p.Fallecidos ?? p.FALLECIDOS ?? p.fallecidos);
-      totals[cid] = (totals[cid] || 0) + fal;
+      if (!clusterTotals[cid]) clusterTotals[cid] = { fallecidos:0 };
+      clusterTotals[cid].fallecidos += fal;
     });
 
     clustersLayer = L.geoJSON(j,{
       pane:'paneClusters',
       pointToLayer:function(f, latlng){
         var cid = f.properties?.CLUSTER_ID;
-        var tf = totals[cid] ?? 0;
+        var tf = clusterTotals[cid]?.fallecidos ?? 0;
         return L.circleMarker(latlng,{
           radius:6,
           fillColor: colorByFallecidos(tf),
@@ -452,14 +628,26 @@ fetch('data/clusters.geojson')
         });
       },
       onEachFeature:function(f, layer){
-        var cid = f.properties?.CLUSTER_ID ?? '-';
-        var tf = totals[cid] ?? 0;
+        var cid = String(f.properties?.CLUSTER_ID ?? '-');
+        var tf = clusterTotals[cid]?.fallecidos ?? 0;
+
+        // index puntos por cluster
+        if (!clusterPoints[cid]) clusterPoints[cid] = [];
+        clusterPoints[cid].push(layer);
 
         layer.bindTooltip(
           '<b>Clúster:</b> ' + cid + '<br>' +
           '<b>Fallecidos (clúster):</b> ' + fmtInt(tf),
           { sticky:true, direction:'top' }
         );
+
+        // 🔥 HOVER: resaltar todos los tramos del cluster
+        layer.on('mouseover', function(){
+          highlightCluster(cid, { autoEnableTramos:true }); // auto enciende tramos si estaban apagados
+        });
+        layer.on('mouseout', function(){
+          clearHighlight(true); // apaga tramos si se auto-activaron
+        });
       }
     }).addTo(map);
 
@@ -480,4 +668,3 @@ fetch('data/clusters.geojson')
 </script>
 </body>
 </html>
-
