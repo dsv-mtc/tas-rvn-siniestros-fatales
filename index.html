@@ -70,6 +70,39 @@ html, body { height:100%; margin:0; }
   height:10px;
 }
 </style>
+
+  @media (max-width: 768px){
+
+  #map{
+    height:100dvh;
+  }
+
+  .legend{
+    width:90vw;
+    max-width:320px;
+    font-size:11px;
+  }
+
+  .legend-body{
+    max-height:35vh;
+  }
+
+  .leaflet-control-layers{
+    font-size:12px;
+  }
+
+  .leaflet-control-minimap{
+    transform:scale(0.85);
+    transform-origin:bottom right;
+  }
+
+  .leaflet-top.leaflet-left{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+}
+
 </head>
 
 <body>
