@@ -69,41 +69,6 @@ html, body { height:100%; margin:0; }
   border:2px dashed #333;
   height:10px;
 }
-
-/* ======================================================
-   AJUSTES SOLO PARA CELULAR (ÚNICO AGREGADO)
-   ====================================================== */
-@media (max-width: 768px){
-
-  #map{
-    height:100dvh;
-  }
-
-  .legend{
-    width:90vw;
-    max-width:320px;
-    font-size:11px;
-  }
-
-  .legend-body{
-    max-height:35vh;
-  }
-
-  .leaflet-control-layers{
-    font-size:12px;
-  }
-
-  .leaflet-control-minimap{
-    transform:scale(0.85);
-    transform-origin:bottom right;
-  }
-
-  .leaflet-top.leaflet-left{
-    display:flex;
-    flex-direction:column;
-    gap:6px;
-  }
-}
 </style>
 </head>
 
@@ -226,14 +191,14 @@ fetch('data/rvn.geojson').then(r=>r.json()).then(j=>rvnLayer.addData(j));
 // CLUSTERS
 //////////////////////////////////////////////////
 var clusterTotals = {};
-var clusterCounts = {};
+var clusterCounts = {};                 // ← CAMBIO
 var clustersLayer = L.geoJSON(null,{pane:'paneClusters'}).addTo(map);
 
 fetch('data/clusters.geojson').then(r=>r.json()).then(j=>{
   j.features.forEach(f=>{
     var id = f.properties.CLUSTER_ID;
     clusterTotals[id] = (clusterTotals[id]||0) + Number(f.properties.Fallecidos||0);
-    clusterCounts[id] = (clusterCounts[id]||0) + 1;
+    clusterCounts[id] = (clusterCounts[id]||0) + 1;   // ← CAMBIO
   });
 
   clustersLayer.options.pointToLayer = (f,ll)=>L.circleMarker(ll,{
@@ -247,7 +212,7 @@ fetch('data/clusters.geojson').then(r=>r.json()).then(j=>{
     var id = f.properties.CLUSTER_ID;
     l.bindTooltip(
       '<b>Cluster:</b> '+id+
-      '<br><b>Siniestros:</b> '+clusterCounts[id]+
+      '<br><b>Siniestros:</b> '+clusterCounts[id]+      // ← CAMBIO
       '<br><b>Fallecidos:</b> '+clusterTotals[id],
       {sticky:true}
     );
@@ -269,8 +234,8 @@ var tramosLayer = L.geoJSON(null, {
     l.bindTooltip(
       '<b>Tramo Alta Siniestralidad</b><br>' +
       '<b>Cluster:</b> ' + (f.properties.CLUSTER_ID || '-') + '<br>' +
-      '<b>Siniestros:</b> ' + (f.properties.Siniestros || '-') + '<br>' +
-      '<b>Fallecidos:</b> ' + (f.properties.Fallecidos || '-') + '<br>' +
+      '<b>Siniestros:</b> ' + (f.properties.Siniestros || '-') + '<br>' + // ← CAMBIO
+      '<b>Fallecidos:</b> ' + (f.properties.Fallecidos || '-') + '<br>' + // ← CAMBIO
       '<b>Longitud:</b> ' + m + ' m',
       { sticky: true }
     );
@@ -343,3 +308,5 @@ function construirLeyenda(){
 </script>
 </body>
 </html>
+
+codigo que si funciona
