@@ -40,7 +40,9 @@ html, body { height:100%; margin:0; }
   overflow:auto;
 }
 
-.legend.collapsed .legend-body{ display:none; }
+.legend.collapsed .legend-body{
+  display:none;
+}
 
 .legend-title{
   font-weight:700;
@@ -107,12 +109,13 @@ new L.Control.MiniMap(
   {toggleDisplay:true, minimized:true}
 ).addTo(map);
 
-//////////////////////////////////////////////////
+  //////////////////////////////////////////////////
 // UBICACIÓN ACTUAL
 //////////////////////////////////////////////////
 var userMarker = null;
 var userCircle = null;
 
+// Botón de ubicación
 var locateControl = L.control({ position:'topleft' });
 
 locateControl.onAdd = function(){
@@ -137,6 +140,7 @@ locateControl.onAdd = function(){
 
 locateControl.addTo(map);
 
+// Cuando se encuentra la ubicación
 map.on('locationfound',function(e){
   if(userMarker) map.removeLayer(userMarker);
   if(userCircle) map.removeLayer(userCircle);
@@ -163,9 +167,11 @@ map.on('locationfound',function(e){
   );
 });
 
+// Si falla la ubicación
 map.on('locationerror',function(){
   alert('No se pudo obtener la ubicación');
 });
+
 
 //////////////////////////////////////////////////
 // PANES
@@ -192,7 +198,6 @@ var adminColorMap={}, adminColors=[
  '#1f78b4','#33a02c','#e31a1c','#ff7f00','#6a3d9a',
  '#a6cee3','#b2df8a','#fb9a99','#fdbf6f','#cab2d6'
 ];
-
 function colorByAdmin(a){
   if(!adminColorMap[a]){
     adminColorMap[a]=adminColors[Object.keys(adminColorMap).length % adminColors.length];
@@ -232,10 +237,7 @@ var departamentosLayer = L.geoJSON(null,{
     l.bindTooltip('<b>Departamento:</b> '+(f.properties.NOMBDEP||'-'),{sticky:true});
   }
 }).addTo(map);
-
-fetch('data/departamentos.geojson')
-  .then(r=>r.json())
-  .then(j=>departamentosLayer.addData(j));
+fetch('data/departamentos.geojson').then(r=>r.json()).then(j=>departamentosLayer.addData(j));
 
 //////////////////////////////////////////////////
 // RVN
@@ -247,47 +249,29 @@ var rvnLayer = L.geoJSON(null,{
     l.bindTooltip('<b>Ruta:</b> '+(f.properties.cCodRuta||'-'),{sticky:true});
   }
 }).addTo(map);
-
-fetch('data/rvn.geojson')
-  .then(r=>r.json())
-  .then(j=>rvnLayer.addData(j));
+fetch('data/rvn.geojson').then(r=>r.json()).then(j=>rvnLayer.addData(j));
 
 //////////////////////////////////////////////////
 // CLUSTERS
 //////////////////////////////////////////////////
-var clusterTotals = {};
-var clusterCounts = {};
-var clustersLayer = L.geoJSON(null,{pane:'paneClusters'}).addTo(map);
-
-fetch('data/clusters.geojson')
-  .then(r=>r.json())
-  .then(j=>{
-    j.features.forEach(f=>{
-      var id = f.properties.CLUSTER_ID;
-      clusterTotals[id] = (clusterTotals[id] || 0) + Number(f.properties.Fallecidos || 0);
-      clusterCounts[id] = (clusterCounts[id] || 0) + 1;
-    });
-
-    clustersLayer.options.pointToLayer = (f,ll)=>L.circleMarker(ll,{
-      radius:6,
-      fillColor:colorByFallecidos(clusterTotals[f.properties.CLUSTER_ID]),
-      color:'#111',
-      fillOpacity:0.75
-    });
-
-    clustersLayer.options.onEachFeature = (f,l)=>{
-      var id = f.properties.CLUSTER_ID;
-      l.bindTooltip(
-        '<b>Cluster:</b> ' + id +
-        '<br><b>Siniestros:</b> ' + clusterCounts[id] +
-        '<br><b>Fallecidos:</b> ' + clusterTotals[id],
-        {sticky:true}
-      );
-    };
-
-    clustersLayer.addData(j);
-    map.fitBounds(clustersLayer.getBounds(),{padding:[20,20]});
+var clusterTotals={}, clustersLayer=L.geoJSON(null,{pane:'paneClusters'}).addTo(map);
+fetch('data/clusters.geojson').then(r=>r.json()).then(j=>{
+  j.features.forEach(f=>{
+    var id=f.properties.CLUSTER_ID;
+    clusterTotals[id]=(clusterTotals[id]||0)+Number(f.properties.Fallecidos||0);
   });
+  clustersLayer.options.pointToLayer=(f,ll)=>L.circleMarker(ll,{
+    radius:6,
+    fillColor:colorByFallecidos(clusterTotals[f.properties.CLUSTER_ID]),
+    color:'#111',fillOpacity:0.75
+  });
+  clustersLayer.options.onEachFeature=(f,l)=>{
+    l.bindTooltip('<b>Cluster:</b> '+f.properties.CLUSTER_ID+
+      '<br><b>Fallecidos:</b> '+clusterTotals[f.properties.CLUSTER_ID],{sticky:true});
+  };
+  clustersLayer.addData(j);
+  map.fitBounds(clustersLayer.getBounds(),{padding:[20,20]});
+});
 
 //////////////////////////////////////////////////
 // TRAMOS
@@ -301,8 +285,6 @@ var tramosLayer = L.geoJSON(null,{
     l.bindTooltip(
       '<b>Tramo Alta Siniestralidad</b><br>'+
       '<b>Cluster:</b> ' + (f.properties.CLUSTER_ID || '-') + '<br>' +
-      '<b>Siniestros:</b> ' + (f.properties.Siniestros || 0) + '<br>' +
-      '<b>Fallecidos:</b> ' + (f.properties.Fallecidos || 0) + '<br>' +
       '<b>Longitud:</b> ' + m + ' m',
       { sticky:true }
     );
@@ -325,49 +307,78 @@ L.control.layers(null,{
 },{collapsed:true}).addTo(map);
 
 //////////////////////////////////////////////////
-// LEYENDA
+// LEYENDA UNIFICADA Y SEGURA
 //////////////////////////////////////////////////
 var legend=L.control({position:'bottomleft'});
 
 function construirLeyenda(){
-  legend.onAdd=function(){
-    var d=L.DomUtil.create('div','legend collapsed');
+  legend.onAdd = function(){
+    var d = L.DomUtil.create('div','legend');
+    d.classList.add('collapsed');
 
-    var header=L.DomUtil.create('div','legend-header',d);
-    header.innerHTML='LEYENDA <span>☰</span>';
+    var header = L.DomUtil.create('div','legend-header', d);
+    header.innerHTML = 'LEYENDA <span>☰</span>';
 
-    var body=L.DomUtil.create('div','legend-body',d);
+    var body = L.DomUtil.create('div','legend-body', d);
 
-    body.innerHTML+=`
+    // ======================
+    // Fallecidos por clúster
+    // ======================
+    body.innerHTML += `
       <div class="legend-title">Fallecidos por clúster</div>
       <div class="legend-row"><span class="swatch" style="background:#fee5d9"></span>1–5</div>
       <div class="legend-row"><span class="swatch" style="background:#fb6a4a"></span>6–10</div>
       <div class="legend-row"><span class="swatch" style="background:#de2d26"></span>11–15</div>
       <div class="legend-row"><span class="swatch" style="background:#a50f15"></span>16–20</div>
       <div class="legend-row"><span class="swatch" style="background:#67000d"></span>≥21</div>
+    `;
 
+    // ======================
+    // Concesiones
+    // ======================
+    body.innerHTML += `
       <div class="legend-title">Concesiones</div>
     `;
 
     Object.keys(adminColorMap).sort().forEach(a=>{
-      body.innerHTML+=`
+      body.innerHTML += `
         <div class="legend-row">
           <span class="swatch" style="background:${adminColorMap[a]}"></span>${a}
-        </div>`;
+        </div>
+      `;
     });
 
-    body.innerHTML+=`
-      <div class="legend-row"><span class="swatch line" style="background:#f4ae18"></span>Tramos Alta Siniestralidad</div>
-      <div class="legend-row"><span class="swatch line" style="background:#8d6e63"></span>Red Vial Nacional</div>
-      <div class="legend-row"><span class="swatch dashed"></span>Departamentos</div>
+    // ======================
+    // Otros
+    // ======================
+    body.innerHTML += `
+    <div class="legend-title"> </div>
+      <div class="legend-row">
+        <span class="swatch line" style="background:#f4ae18"></span>
+        Tramos Alta Siniestralidad
+      </div>
+      <div class="legend-row">
+        <span class="swatch line" style="background:#8d6e63"></span>
+        Red Vial Nacional
+      </div>
+      <div class="legend-row">
+        <span class="swatch dashed"></span>
+        Departamentos
+      </div>
     `;
 
-    L.DomEvent.on(header,'click',()=>d.classList.toggle('collapsed'));
+    // Evento colapsable (SEGURO)
+    L.DomEvent.on(header, 'click', function(){
+      d.classList.toggle('collapsed');
+    });
+
     return d;
   };
 
   legend.addTo(map);
 }
+
 </script>
 </body>
 </html>
+revisa y corrige que puede estar mal, enviame todo completo
