@@ -242,37 +242,71 @@ L.control.layers(null,{
 var legend=L.control({position:'bottomleft'});
 
 function construirLeyenda(){
-  legend.onAdd=function(){
-    var d=L.DomUtil.create('div','legend');
+  legend.onAdd = function(){
+    var d = L.DomUtil.create('div','legend');
     d.classList.add('collapsed');
 
-    var header=L.DomUtil.create('div','legend-header',d);
-    header.innerHTML='LEYENDA <span>☰</span>';
+    var header = L.DomUtil.create('div','legend-header', d);
+    header.innerHTML = 'LEYENDA <span>☰</span>';
 
-    var body=L.DomUtil.create('div','legend-body',d);
+    var body = L.DomUtil.create('div','legend-body', d);
 
-    body.innerHTML+=`
+    // ======================
+    // Fallecidos por clúster
+    // ======================
+    body.innerHTML += `
       <div class="legend-title">Fallecidos por clúster</div>
       <div class="legend-row"><span class="swatch" style="background:#fee5d9"></span>1–5</div>
       <div class="legend-row"><span class="swatch" style="background:#fb6a4a"></span>6–10</div>
       <div class="legend-row"><span class="swatch" style="background:#de2d26"></span>11–15</div>
       <div class="legend-row"><span class="swatch" style="background:#a50f15"></span>16–20</div>
       <div class="legend-row"><span class="swatch" style="background:#67000d"></span>≥21</div>
+    `;
 
-
+    // ======================
+    // Concesiones
+    // ======================
+    body.innerHTML += `
       <div class="legend-title">Concesiones</div>
     `;
 
     Object.keys(adminColorMap).sort().forEach(a=>{
-      body.innerHTML+=`
+      body.innerHTML += `
         <div class="legend-row">
           <span class="swatch" style="background:${adminColorMap[a]}"></span>${a}
-        </div>`;
-
-      <div class="legend-row"><span class="swatch line" style="background:#f4ae18"></span>Tramos Alta Siniestralidad</div>
-      <div class="legend-row"><span class="swatch line" style="background:#8d6e63"></span>Red Vial Nacional</div>
-      <div class="legend-row"><span class="swatch dashed"></span>Departamentos</div>
+        </div>
+      `;
     });
+
+    // ======================
+    // Otros (sin título)
+    // ======================
+    body.innerHTML += `
+      <div class="legend-row">
+        <span class="swatch line" style="background:#f4ae18"></span>
+        Tramos Alta Siniestralidad
+      </div>
+      <div class="legend-row">
+        <span class="swatch line" style="background:#8d6e63"></span>
+        Red Vial Nacional
+      </div>
+      <div class="legend-row">
+        <span class="swatch dashed"></span>
+        Departamentos
+      </div>
+    `;
+
+    // Evento colapsable (SEGURO)
+    L.DomEvent.on(header, 'click', function(){
+      d.classList.toggle('collapsed');
+    });
+
+    return d;
+  };
+
+  legend.addTo(map);
+}
+
 
     header.onclick=function(){
       d.classList.toggle('collapsed');
