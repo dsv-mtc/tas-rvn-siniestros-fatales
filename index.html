@@ -40,8 +40,9 @@ html, body { height:100%; margin:0; }
   overflow:auto;
 }
 
-.legend.collapsed .legend-body{
-  display:none;
+.legend-body{
+  max-height:28vh;
+  overflow:auto;
 }
 
 .legend-title{
@@ -70,37 +71,45 @@ html, body { height:100%; margin:0; }
   height:10px;
 }
 
-  @media (max-width: 768px){
+@media (max-width: 768px){
 
-  #map{
-    height:100dvh;
-  }
-
+  /* Leyenda más compacta */
   .legend{
     width:90vw;
-    max-width:320px;
-    font-size:11px;
+    max-width:300px;
   }
 
-  .legend-body{
-    max-height:35vh;
-  }
-
-  .leaflet-control-layers{
+  .legend-header{
+    padding:8px 10px;
     font-size:12px;
   }
 
-  .leaflet-control-minimap{
-    transform:scale(0.85);
-    transform-origin:bottom right;
+  .legend-body{
+    max-height:28vh;
+    padding:6px 10px;
   }
 
-  .leaflet-top.leaflet-left{
-    display:flex;
-    flex-direction:column;
+  .legend-title{
+    margin:6px 0 4px;
+    font-size:11px;
+  }
+
+  .legend-row{
+    margin:2px 0;
     gap:6px;
   }
+
+  .swatch{
+    width:12px;
+    height:12px;
+  }
+
+  /* Que inicie colapsada (clave en móvil) */
+  .legend{
+    max-height:none;
+  }
 }
+
 </style>
 </head>
 
