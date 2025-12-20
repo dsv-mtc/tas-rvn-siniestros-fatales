@@ -21,18 +21,33 @@ html, body { height:100%; margin:0; }
   font:12px/1.35 system-ui, Arial;
   max-height:50vh;
   overflow:auto;
+  display:none;
 }
+.legend.open{ display:block; }
+
+.legend-toggle{
+  background:#fff;
+  padding:6px 10px;
+  border-radius:6px;
+  cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,0.2);
+  font-size:13px;
+  margin-bottom:6px;
+}
+
 .legend-title{
   font-weight:700;
   margin:10px 0 6px;
   border-bottom:1px solid #ddd;
 }
+
 .legend-row{
   display:flex;
   align-items:center;
   gap:8px;
   margin:4px 0;
 }
+
 .swatch{
   width:14px; height:14px;
   border-radius:3px;
@@ -142,7 +157,7 @@ fetch('data/concesiones.geojson')
   .then(r=>r.json())
   .then(j=>{
     concesionesLayer.addData(j);
-    construirLeyenda();   // 👈 clave
+    construirLeyenda();
   });
 
 //////////////////////////////////////////////////
@@ -167,15 +182,11 @@ var departamentosLayer = L.geoJSON(null,{
 fetch('data/departamentos.geojson').then(r=>r.json()).then(j=>departamentosLayer.addData(j));
 
 //////////////////////////////////////////////////
-// RVN (color tierra)
+// RVN
 //////////////////////////////////////////////////
 var rvnLayer = L.geoJSON(null,{
   pane:'paneRVN',
-  style:{
-    color:'#8d6e63',
-    weight:2,
-    opacity:0.9
-  },
+  style:{ color:'#8d6e63', weight:2, opacity:0.9 },
   onEachFeature:(f,l)=>{
     l.bindTooltip(
       '<b>Código de ruta:</b> '+(f.properties.cCodRuta||'-'),
@@ -189,9 +200,7 @@ fetch('data/rvn.geojson').then(r=>r.json()).then(j=>rvnLayer.addData(j));
 // CLUSTERS
 //////////////////////////////////////////////////
 var clusterTotals={};
-var clustersLayer = L.geoJSON(null,{
-  pane:'paneClusters'
-}).addTo(map);
+var clustersLayer = L.geoJSON(null,{ pane:'paneClusters' }).addTo(map);
 
 fetch('data/clusters.geojson').then(r=>r.json()).then(j=>{
   j.features.forEach(f=>{
@@ -224,71 +233,8 @@ fetch('data/clusters.geojson').then(r=>r.json()).then(j=>{
 //////////////////////////////////////////////////
 var tramosLayer = L.geoJSON(null,{
   pane:'paneTramos',
-  style:{
-    color:'#f4ae18',
-    weight:5,
-    opacity:0.9
-  },
+  style:{ color:'#f4ae18', weight:5, opacity:0.9 },
   onEachFeature:(f,l)=>{
-    var km = (Number(f.properties.Longitud||0)/1000).toFixed(2);
+    var km=(Number(f.properties.Longitud||0)/1000).toFixed(2);
     l.bindTooltip(
       '<b>Tramo de Alta Siniestralidad</b><br>'+
-      '<b>Cluster:</b> '+(f.properties.CLUSTER_ID||'-')+'<br>'+
-      '<b>Longitud:</b> '+km+' km',
-      {sticky:true}
-    );
-  }
-});
-fetch('data/tramos-siniestros.geojson').then(r=>r.json()).then(j=>tramosLayer.addData(j));
-
-//////////////////////////////////////////////////
-// CONTROL DE CAPAS
-//////////////////////////////////////////////////
-L.control.layers(null,{
-  'Clusters – Fallecidos':clustersLayer,
-  'Tramos de Alta Siniestralidad':tramosLayer,
-  'Concesiones':concesionesLayer,
-  'Red Vial Nacional':rvnLayer,
-  'Departamentos':departamentosLayer
-},{collapsed:false}).addTo(map);
-
-//////////////////////////////////////////////////
-// LEYENDA UNIFICADA
-//////////////////////////////////////////////////
-var legend = L.control({position:'bottomleft'});
-
-function construirLeyenda(){
-  legend.onAdd=function(){
-    var d=L.DomUtil.create('div','legend');
-
-    d.innerHTML += `
-      <div class="legend-title">Fallecidos por clúster</div>
-      <div class="legend-row"><span class="swatch" style="background:#fee5d9"></span>1–5</div>
-      <div class="legend-row"><span class="swatch" style="background:#fb6a4a"></span>6–10</div>
-      <div class="legend-row"><span class="swatch" style="background:#de2d26"></span>11–15</div>
-      <div class="legend-row"><span class="swatch" style="background:#a50f15"></span>16–20</div>
-      <div class="legend-row"><span class="swatch" style="background:#67000d"></span>≥21</div>
-
-      <div class="legend-title">Infraestructura</div>
-      <div class="legend-row"><span class="swatch line" style="background:#f4ae18"></span>Tramos Alta Siniestralidad</div>
-      <div class="legend-row"><span class="swatch line" style="background:#8d6e63"></span>Red Vial Nacional</div>
-      <div class="legend-row"><span class="swatch dashed"></span>Departamentos</div>
-
-      <div class="legend-title">Concesiones</div>
-    `;
-
-    Object.keys(adminColorMap).forEach(a=>{
-      d.innerHTML+=`
-        <div class="legend-row">
-          <span class="swatch" style="background:${adminColorMap[a]}"></span>${a}
-        </div>`;
-    });
-
-    return d;
-  };
-
-  legend.addTo(map);
-}
-</script>
-</body>
-</html>
