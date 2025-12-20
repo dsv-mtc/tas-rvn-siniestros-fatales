@@ -7,7 +7,7 @@
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.polylinemeasure/Leaflet.PolylineMeasure.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.css"/>
 
 <style>
 html, body { height:100%; margin:0; }
@@ -17,7 +17,7 @@ html, body { height:100%; margin:0; }
   background:rgba(255,255,255,0.95);
   padding:10px 12px;
   border-radius:8px;
-  box-shadow:0 2px 10px rgba(0,0,0,0.15);
+  box-shadow:0 2px 10px rgba(0,0,0,0.2);
   font:12px/1.35 system-ui, Arial;
   max-height:50vh;
   overflow:auto;
@@ -36,7 +36,7 @@ html, body { height:100%; margin:0; }
 .swatch{
   width:14px; height:14px;
   border-radius:3px;
-  border:1px solid rgba(0,0,0,0.25);
+  border:1px solid rgba(0,0,0,0.3);
 }
 .swatch.line{ height:4px; border:none; }
 .swatch.dashed{
@@ -61,43 +61,22 @@ html, body { height:100%; margin:0; }
 var map = L.map('map').setView([-9.2, -75], 6);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  attribution:'&copy; OpenStreetMap contributors'
+  attribution:'&copy; OpenStreetMap'
 }).addTo(map);
 
-//////////////////////////////////////////////////
-// CONTROLES
-//////////////////////////////////////////////////
-L.control.polylineMeasure({
-  position:'topleft',
-  unit:'metres',
-  clearMeasurementsOnStop:false,
-  showClearControl:true,
-  tooltipTextFinish:'Doble clic para terminar'
-}).addTo(map);
-
-L.control.scale({
-  position:'bottomright',
-  metric:true,
-  imperial:false,
-  maxWidth:150
-}).addTo(map);
-
-new L.Control.MiniMap(
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'),
-  {toggleDisplay:true, minimized:true}
-).addTo(map);
+L.control.scale({metric:true, imperial:false}).addTo(map);
 
 //////////////////////////////////////////////////
 // PANES
 //////////////////////////////////////////////////
-map.createPane('paneConcesiones');   map.getPane('paneConcesiones').style.zIndex = 200;
-map.createPane('paneDepartamentos'); map.getPane('paneDepartamentos').style.zIndex = 300;
-map.createPane('paneRVN');           map.getPane('paneRVN').style.zIndex = 350;
-map.createPane('paneClusters');      map.getPane('paneClusters').style.zIndex = 450;
-map.createPane('paneTramos');        map.getPane('paneTramos').style.zIndex = 500;
+map.createPane('concesiones').style.zIndex = 200;
+map.createPane('departamentos').style.zIndex = 300;
+map.createPane('rvn').style.zIndex = 350;
+map.createPane('clusters').style.zIndex = 450;
+map.createPane('tramos').style.zIndex = 500;
 
 //////////////////////////////////////////////////
-// COLORES
+// HELPERS
 //////////////////////////////////////////////////
 function colorByFallecidos(v){
   if(v>=21) return '#67000d';
@@ -108,122 +87,63 @@ function colorByFallecidos(v){
   return '#ccc';
 }
 
-var adminColorMap={}, adminColors=[
+var adminColors=[
  '#1f78b4','#33a02c','#e31a1c','#ff7f00','#6a3d9a',
- '#a6cee3','#b2df8a','#fb9a99','#fdbf6f','#cab2d6',
- '#8dd3c7','#ffffb3','#bebada','#fb8072','#80b1d3'
+ '#a6cee3','#b2df8a','#fb9a99','#fdbf6f','#cab2d6'
 ];
+var adminMap={};
+
 function colorByAdmin(a){
-  if(!adminColorMap[a]){
-    adminColorMap[a]=adminColors[Object.keys(adminColorMap).length % adminColors.length];
+  if(!adminMap[a]){
+    adminMap[a]=adminColors[Object.keys(adminMap).length % adminColors.length];
   }
-  return adminColorMap[a];
+  return adminMap[a];
 }
 
 //////////////////////////////////////////////////
-// CONCESIONES
+// CAPAS
 //////////////////////////////////////////////////
-var concesionesLayer = L.geoJSON(null,{
-  pane:'paneConcesiones',
+var concesiones = L.geoJSON(null,{
+  pane:'concesiones',
   style:f=>({
-    color:colorByAdmin(f.properties.ADM_VALIDO||'N/D'),
+    color: colorByAdmin(f.properties.ADM_VALIDO||'N/D'),
     weight:4,
     opacity:0.7
   }),
   onEachFeature:(f,l)=>{
-    l.bindTooltip(
-      '<b>Concesión:</b> '+(f.properties.ADM_VALIDO||'-'),
-      {sticky:true}
-    );
+    l.bindTooltip('<b>Concesión:</b> '+(f.properties.ADM_VALIDO||'-'),{sticky:true});
   }
 }).addTo(map);
 
-fetch('data/concesiones.geojson')
-  .then(r=>r.json())
-  .then(j=>{
-    concesionesLayer.addData(j);
-    construirLeyenda();   // 👈 clave
-  });
-
-//////////////////////////////////////////////////
-// DEPARTAMENTOS
-//////////////////////////////////////////////////
-var departamentosLayer = L.geoJSON(null,{
-  pane:'paneDepartamentos',
+var departamentos = L.geoJSON(null,{
+  pane:'departamentos',
   style:{
     color:'#222',
     weight:1.2,
     fill:false,
-    opacity:0.6,
     dashArray:'4 4'
   },
   onEachFeature:(f,l)=>{
-    l.bindTooltip(
-      '<b>Departamento:</b> '+(f.properties.NOMBDEP||'-'),
-      {sticky:true}
-    );
+    l.bindTooltip('<b>Departamento:</b> '+(f.properties.NOMBDEP||'-'),{sticky:true});
   }
 }).addTo(map);
-fetch('data/departamentos.geojson').then(r=>r.json()).then(j=>departamentosLayer.addData(j));
 
-//////////////////////////////////////////////////
-// RVN (color tierra)
-//////////////////////////////////////////////////
-var rvnLayer = L.geoJSON(null,{
-  pane:'paneRVN',
+var rvn = L.geoJSON(null,{
+  pane:'rvn',
   style:{
-    color:'#8d6e63',
+    color:'#8d6e63',   // MARRÓN / TIERRA
     weight:2,
     opacity:0.9
   },
   onEachFeature:(f,l)=>{
-    l.bindTooltip(
-      '<b>Código de ruta:</b> '+(f.properties.cCodRuta||'-'),
-      {sticky:true}
-    );
+    l.bindTooltip('<b>Ruta:</b> '+(f.properties.cCodRuta||'-'),{sticky:true});
   }
 }).addTo(map);
-fetch('data/rvn.geojson').then(r=>r.json()).then(j=>rvnLayer.addData(j));
 
-//////////////////////////////////////////////////
-// CLUSTERS
-//////////////////////////////////////////////////
-var clusterTotals={};
-var clustersLayer = L.geoJSON(null,{
-  pane:'paneClusters'
-}).addTo(map);
+var clusters = L.geoJSON(null,{ pane:'clusters' }).addTo(map);
 
-fetch('data/clusters.geojson').then(r=>r.json()).then(j=>{
-  j.features.forEach(f=>{
-    var id=f.properties.CLUSTER_ID;
-    clusterTotals[id]=(clusterTotals[id]||0)+Number(f.properties.Fallecidos||0);
-  });
-
-  clustersLayer.options.pointToLayer=(f,latlng)=>L.circleMarker(latlng,{
-    radius:6,
-    fillColor:colorByFallecidos(clusterTotals[f.properties.CLUSTER_ID]),
-    color:'#111',
-    weight:1,
-    fillOpacity:0.75
-  });
-
-  clustersLayer.options.onEachFeature=(f,l)=>{
-    l.bindTooltip(
-      '<b>Cluster:</b> '+f.properties.CLUSTER_ID+
-      '<br><b>Fallecidos:</b> '+clusterTotals[f.properties.CLUSTER_ID],
-      {sticky:true}
-    );
-  };
-
-  clustersLayer.addData(j);
-  map.fitBounds(clustersLayer.getBounds(),{padding:[20,20]});
-});
-
-//////////////////////////////////////////////////
-// TRAMOS ALTA SINIESTRALIDAD
-//////////////////////////////////////////////////
-var tramosLayer = L.geoJSON(null,{
-  pane:'paneTramos',
+var tramos = L.geoJSON(null,{
+  pane:'tramos',
   style:{
     color:'#f4ae18',
     weight:5,
@@ -239,56 +159,87 @@ var tramosLayer = L.geoJSON(null,{
     );
   }
 });
-fetch('data/tramos-siniestros.geojson').then(r=>r.json()).then(j=>tramosLayer.addData(j));
 
 //////////////////////////////////////////////////
-// CONTROL DE CAPAS
+// CARGA DATOS
+//////////////////////////////////////////////////
+fetch('data/concesiones.geojson').then(r=>r.json()).then(j=>concesiones.addData(j));
+fetch('data/departamentos.geojson').then(r=>r.json()).then(j=>departamentos.addData(j));
+fetch('data/rvn.geojson').then(r=>r.json()).then(j=>rvn.addData(j));
+
+var clusterTotals={};
+fetch('data/clusters.geojson').then(r=>r.json()).then(j=>{
+  j.features.forEach(f=>{
+    var id=f.properties.CLUSTER_ID;
+    clusterTotals[id]=(clusterTotals[id]||0)+Number(f.properties.Fallecidos||0);
+  });
+
+  clusters.options.pointToLayer=(f,ll)=>L.circleMarker(ll,{
+    radius:6,
+    fillColor: colorByFallecidos(clusterTotals[f.properties.CLUSTER_ID]),
+    color:'#111',
+    weight:1,
+    fillOpacity:0.75
+  });
+
+  clusters.options.onEachFeature=(f,l)=>{
+    l.bindTooltip(
+      '<b>Cluster:</b> '+f.properties.CLUSTER_ID+
+      '<br><b>Fallecidos:</b> '+clusterTotals[f.properties.CLUSTER_ID],
+      {sticky:true}
+    );
+  };
+
+  clusters.addData(j);
+  map.fitBounds(clusters.getBounds(),{padding:[20,20]});
+});
+
+fetch('data/tramos-siniestros.geojson').then(r=>r.json()).then(j=>tramos.addData(j));
+
+//////////////////////////////////////////////////
+// CONTROL DE CAPAS (CHECK)
 //////////////////////////////////////////////////
 L.control.layers(null,{
-  'Clusters – Fallecidos':clustersLayer,
-  'Tramos de Alta Siniestralidad':tramosLayer,
-  'Concesiones':concesionesLayer,
-  'Red Vial Nacional':rvnLayer,
-  'Departamentos':departamentosLayer
+  'Clusters – Fallecidos':clusters,
+  'Tramos de Alta Siniestralidad':tramos,
+  'Concesiones':concesiones,
+  'Red Vial Nacional':rvn,
+  'Departamentos':departamentos
 },{collapsed:false}).addTo(map);
 
 //////////////////////////////////////////////////
 // LEYENDA UNIFICADA
 //////////////////////////////////////////////////
-var legend = L.control({position:'bottomleft'});
+var legend=L.control({position:'bottomleft'});
+legend.onAdd=function(){
+  var d=L.DomUtil.create('div','legend');
 
-function construirLeyenda(){
-  legend.onAdd=function(){
-    var d=L.DomUtil.create('div','legend');
+  d.innerHTML += `
+    <div class="legend-title">Fallecidos por clúster</div>
+    <div class="legend-row"><span class="swatch" style="background:#fee5d9"></span>1–5</div>
+    <div class="legend-row"><span class="swatch" style="background:#fb6a4a"></span>6–10</div>
+    <div class="legend-row"><span class="swatch" style="background:#de2d26"></span>11–15</div>
+    <div class="legend-row"><span class="swatch" style="background:#a50f15"></span>16–20</div>
+    <div class="legend-row"><span class="swatch" style="background:#67000d"></span>≥21</div>
 
-    d.innerHTML += `
-      <div class="legend-title">Fallecidos por clúster</div>
-      <div class="legend-row"><span class="swatch" style="background:#fee5d9"></span>1–5</div>
-      <div class="legend-row"><span class="swatch" style="background:#fb6a4a"></span>6–10</div>
-      <div class="legend-row"><span class="swatch" style="background:#de2d26"></span>11–15</div>
-      <div class="legend-row"><span class="swatch" style="background:#a50f15"></span>16–20</div>
-      <div class="legend-row"><span class="swatch" style="background:#67000d"></span>≥21</div>
+    <div class="legend-title">Infraestructura</div>
+    <div class="legend-row"><span class="swatch line" style="background:#f4ae18"></span>Tramo Alta Siniestralidad</div>
+    <div class="legend-row"><span class="swatch line" style="background:#8d6e63"></span>Red Vial Nacional</div>
+    <div class="legend-row"><span class="swatch dashed"></span>Departamentos</div>
 
-      <div class="legend-title">Infraestructura</div>
-      <div class="legend-row"><span class="swatch line" style="background:#f4ae18"></span>Tramos Alta Siniestralidad</div>
-      <div class="legend-row"><span class="swatch line" style="background:#8d6e63"></span>Red Vial Nacional</div>
-      <div class="legend-row"><span class="swatch dashed"></span>Departamentos</div>
+    <div class="legend-title">Concesiones</div>
+  `;
 
-      <div class="legend-title">Concesiones</div>
-    `;
+  Object.keys(adminMap).forEach(a=>{
+    d.innerHTML+=`
+      <div class="legend-row">
+        <span class="swatch" style="background:${adminMap[a]}"></span>${a}
+      </div>`;
+  });
 
-    Object.keys(adminColorMap).forEach(a=>{
-      d.innerHTML+=`
-        <div class="legend-row">
-          <span class="swatch" style="background:${adminColorMap[a]}"></span>${a}
-        </div>`;
-    });
-
-    return d;
-  };
-
-  legend.addTo(map);
-}
+  return d;
+};
+legend.addTo(map);
 </script>
 </body>
 </html>
