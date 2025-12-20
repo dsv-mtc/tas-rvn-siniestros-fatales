@@ -280,11 +280,16 @@ var tramosLayer=L.geoJSON(null,{
   pane:'paneTramos',
   style:{ color:'#f4ae18', weight:5 },
   onEachFeature:(f,l)=>{
-    var km=(Number(f.properties.Longitud||0)/1000).toFixed(2);
-    l.bindTooltip(
-      '<b>Tramo Alta Siniestralidad</b><br>'+
-      '<b>Cluster:</b> '+(f.properties.CLUSTER_ID||'-')+'<br>'+
-      '<b>Longitud:</b> '+km+' km',{sticky:true});
+  var m = Number(f.properties.Longitud_m || 0).toFixed(0);
+
+  l.bindTooltip(
+    '<b>Tramo Alta Siniestralidad</b><br>'+
+    '<b>Cluster:</b> ' + (f.properties.CLUSTER_ID || '-') + '<br>' +
+    '<b>Longitud:</b> ' + m + ' m',
+    { sticky:true }
+  );
+}
+
   }
 });
 fetch('data/tramos-siniestros.geojson').then(r=>r.json()).then(j=>tramosLayer.addData(j));
