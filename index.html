@@ -13,6 +13,7 @@
 html, body { height:100%; margin:0; }
 #map { height:100vh; width:100%; }
 
+/* ===== LEYENDA ===== */
 .legend{
   background:rgba(255,255,255,0.95);
   padding:10px 12px;
@@ -21,7 +22,19 @@ html, body { height:100%; margin:0; }
   font:12px/1.35 system-ui, Arial;
   max-height:50vh;
   overflow:auto;
+  display:none;
 }
+.legend.open{ display:block; }
+
+.legend-toggle{
+  background:#fff;
+  border-radius:6px;
+  padding:6px 10px;
+  cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,0.2);
+  font-size:13px;
+}
+
 .legend-title{
   font-weight:700;
   margin:10px 0 6px;
@@ -44,6 +57,16 @@ html, body { height:100%; margin:0; }
   border:2px dashed #333;
   height:10px;
 }
+
+/* ===== BOTONES ===== */
+.leaflet-control.custom-btn{
+  background:#fff;
+  padding:6px;
+  border-radius:6px;
+  cursor:pointer;
+  box-shadow:0 2px 6px rgba(0,0,0,0.25);
+  font-size:14px;
+}
 </style>
 </head>
 
@@ -53,6 +76,7 @@ html, body { height:100%; margin:0; }
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.polylinemeasure/Leaflet.PolylineMeasure.js"></script>
 <script src="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.js"></script>
+<script src="https://unpkg.com/leaflet-easyprint@2.1.9/dist/bundle.js"></script>
 
 <script>
 //////////////////////////////////////////////////
@@ -65,22 +89,16 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
 }).addTo(map);
 
 //////////////////////////////////////////////////
-// CONTROLES
+// CONTROLES BASE
 //////////////////////////////////////////////////
 L.control.polylineMeasure({
   position:'topleft',
   unit:'metres',
   clearMeasurementsOnStop:false,
-  showClearControl:true,
-  tooltipTextFinish:'Doble clic para terminar'
+  showClearControl:true
 }).addTo(map);
 
-L.control.scale({
-  position:'bottomright',
-  metric:true,
-  imperial:false,
-  maxWidth:150
-}).addTo(map);
+L.control.scale({ metric:true, imperial:false }).addTo(map);
 
 new L.Control.MiniMap(
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'),
@@ -110,8 +128,7 @@ function colorByFallecidos(v){
 
 var adminColorMap={}, adminColors=[
  '#1f78b4','#33a02c','#e31a1c','#ff7f00','#6a3d9a',
- '#a6cee3','#b2df8a','#fb9a99','#fdbf6f','#cab2d6',
- '#8dd3c7','#ffffb3','#bebada','#fb8072','#80b1d3'
+ '#a6cee3','#b2df8a','#fb9a99','#fdbf6f','#cab2d6'
 ];
 function colorByAdmin(a){
   if(!adminColorMap[a]){
@@ -121,174 +138,82 @@ function colorByAdmin(a){
 }
 
 //////////////////////////////////////////////////
-// CONCESIONES
+// CAPAS
 //////////////////////////////////////////////////
 var concesionesLayer = L.geoJSON(null,{
   pane:'paneConcesiones',
-  style:f=>({
-    color:colorByAdmin(f.properties.ADM_VALIDO||'N/D'),
-    weight:4,
-    opacity:0.7
-  }),
-  onEachFeature:(f,l)=>{
-    l.bindTooltip(
-      '<b>Concesión:</b> '+(f.properties.ADM_VALIDO||'-'),
-      {sticky:true}
-    );
-  }
+  style:f=>({ color:colorByAdmin(f.properties.ADM_VALIDO), weight:4 }),
+  onEachFeature:(f,l)=>l.bindTooltip(f.properties.ADM_VALIDO,{sticky:true})
 }).addTo(map);
 
 fetch('data/concesiones.geojson')
   .then(r=>r.json())
-  .then(j=>{
-    concesionesLayer.addData(j);
-    construirLeyenda();   // 👈 clave
-  });
+  .then(j=>{ concesionesLayer.addData(j); construirLeyenda(); });
 
-//////////////////////////////////////////////////
-// DEPARTAMENTOS
-//////////////////////////////////////////////////
+var rvnLayer = L.geoJSON(null,{
+  pane:'paneRVN',
+  style:{ color:'#8d6e63', weight:2 },
+  onEachFeature:(f,l)=>l.bindTooltip(f.properties.cCodRuta,{sticky:true})
+}).addTo(map);
+fetch('data/rvn.geojson').then(r=>r.json()).then(j=>rvnLayer.addData(j));
+
 var departamentosLayer = L.geoJSON(null,{
   pane:'paneDepartamentos',
-  style:{
-    color:'#222',
-    weight:1.2,
-    fill:false,
-    opacity:0.6,
-    dashArray:'4 4'
-  },
-  onEachFeature:(f,l)=>{
-    l.bindTooltip(
-      '<b>Departamento:</b> '+(f.properties.NOMBDEP||'-'),
-      {sticky:true}
-    );
-  }
+  style:{ color:'#222', dashArray:'4 4', fill:false }
 }).addTo(map);
 fetch('data/departamentos.geojson').then(r=>r.json()).then(j=>departamentosLayer.addData(j));
 
 //////////////////////////////////////////////////
-// RVN (color tierra)
+// CONTROL DE CAPAS CON ÍCONO
 //////////////////////////////////////////////////
-var rvnLayer = L.geoJSON(null,{
-  pane:'paneRVN',
-  style:{
-    color:'#8d6e63',
-    weight:2,
-    opacity:0.9
-  },
-  onEachFeature:(f,l)=>{
-    l.bindTooltip(
-      '<b>Código de ruta:</b> '+(f.properties.cCodRuta||'-'),
-      {sticky:true}
-    );
-  }
-}).addTo(map);
-fetch('data/rvn.geojson').then(r=>r.json()).then(j=>rvnLayer.addData(j));
-
-//////////////////////////////////////////////////
-// CLUSTERS
-//////////////////////////////////////////////////
-var clusterTotals={};
-var clustersLayer = L.geoJSON(null,{
-  pane:'paneClusters'
-}).addTo(map);
-
-fetch('data/clusters.geojson').then(r=>r.json()).then(j=>{
-  j.features.forEach(f=>{
-    var id=f.properties.CLUSTER_ID;
-    clusterTotals[id]=(clusterTotals[id]||0)+Number(f.properties.Fallecidos||0);
-  });
-
-  clustersLayer.options.pointToLayer=(f,latlng)=>L.circleMarker(latlng,{
-    radius:6,
-    fillColor:colorByFallecidos(clusterTotals[f.properties.CLUSTER_ID]),
-    color:'#111',
-    weight:1,
-    fillOpacity:0.75
-  });
-
-  clustersLayer.options.onEachFeature=(f,l)=>{
-    l.bindTooltip(
-      '<b>Cluster:</b> '+f.properties.CLUSTER_ID+
-      '<br><b>Fallecidos:</b> '+clusterTotals[f.properties.CLUSTER_ID],
-      {sticky:true}
-    );
-  };
-
-  clustersLayer.addData(j);
-  map.fitBounds(clustersLayer.getBounds(),{padding:[20,20]});
-});
-
-//////////////////////////////////////////////////
-// TRAMOS ALTA SINIESTRALIDAD
-//////////////////////////////////////////////////
-var tramosLayer = L.geoJSON(null,{
-  pane:'paneTramos',
-  style:{
-    color:'#f4ae18',
-    weight:5,
-    opacity:0.9
-  },
-  onEachFeature:(f,l)=>{
-    var km = (Number(f.properties.Longitud||0)/1000).toFixed(2);
-    l.bindTooltip(
-      '<b>Tramo de Alta Siniestralidad</b><br>'+
-      '<b>Cluster:</b> '+(f.properties.CLUSTER_ID||'-')+'<br>'+
-      '<b>Longitud:</b> '+km+' km',
-      {sticky:true}
-    );
-  }
-});
-fetch('data/tramos-siniestros.geojson').then(r=>r.json()).then(j=>tramosLayer.addData(j));
-
-//////////////////////////////////////////////////
-// CONTROL DE CAPAS
-//////////////////////////////////////////////////
-L.control.layers(null,{
-  'Clusters – Fallecidos':clustersLayer,
-  'Tramos de Alta Siniestralidad':tramosLayer,
+var capasControl = L.control.layers(null,{
   'Concesiones':concesionesLayer,
-  'Red Vial Nacional':rvnLayer,
+  'RVN':rvnLayer,
   'Departamentos':departamentosLayer
-},{collapsed:false}).addTo(map);
+},{collapsed:true});
+capasControl.addTo(map);
 
 //////////////////////////////////////////////////
-// LEYENDA UNIFICADA
+// EXPORTAR MAPA
+//////////////////////////////////////////////////
+L.easyPrint({
+  title:'Exportar mapa',
+  position:'topright',
+  sizeModes:['A4Portrait','Current'],
+  exportOnly:true
+}).addTo(map);
+
+//////////////////////////////////////////////////
+// LEYENDA COLAPSABLE
 //////////////////////////////////////////////////
 var legend = L.control({position:'bottomleft'});
+legend.onAdd=function(){
+  var div=L.DomUtil.create('div');
+  div.innerHTML=`
+    <div class="legend-toggle">☰ Leyenda</div>
+    <div class="legend" id="legendBox"></div>`;
+  return div;
+};
+legend.addTo(map);
 
 function construirLeyenda(){
-  legend.onAdd=function(){
-    var d=L.DomUtil.create('div','legend');
+  var box=document.getElementById('legendBox');
+  var admins=Object.keys(adminColorMap).sort();
 
-    d.innerHTML += `
-      <div class="legend-title">Fallecidos por clúster</div>
-      <div class="legend-row"><span class="swatch" style="background:#fee5d9"></span>1–5</div>
-      <div class="legend-row"><span class="swatch" style="background:#fb6a4a"></span>6–10</div>
-      <div class="legend-row"><span class="swatch" style="background:#de2d26"></span>11–15</div>
-      <div class="legend-row"><span class="swatch" style="background:#a50f15"></span>16–20</div>
-      <div class="legend-row"><span class="swatch" style="background:#67000d"></span>≥21</div>
-
-      <div class="legend-title">Infraestructura</div>
-      <div class="legend-row"><span class="swatch line" style="background:#f4ae18"></span>Tramos Alta Siniestralidad</div>
-      <div class="legend-row"><span class="swatch line" style="background:#8d6e63"></span>Red Vial Nacional</div>
-      <div class="legend-row"><span class="swatch dashed"></span>Departamentos</div>
-
-      <div class="legend-title">Concesiones</div>
-    `;
-
-    Object.keys(adminColorMap).forEach(a=>{
-      d.innerHTML+=`
-        <div class="legend-row">
-          <span class="swatch" style="background:${adminColorMap[a]}"></span>${a}
-        </div>`;
-    });
-
-    return d;
-  };
-
-  legend.addTo(map);
+  box.innerHTML=`
+    <div class="legend-title">Concesiones</div>
+    ${admins.map(a=>`
+      <div class="legend-row">
+        <span class="swatch" style="background:${adminColorMap[a]}"></span>${a}
+      </div>`).join('')}
+  `;
 }
+
+document.addEventListener('click',e=>{
+  if(e.target.classList.contains('legend-toggle')){
+    document.getElementById('legendBox').classList.toggle('open');
+  }
+});
 </script>
 </body>
 </html>
