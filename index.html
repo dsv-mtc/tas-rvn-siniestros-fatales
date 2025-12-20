@@ -2,49 +2,109 @@
 <html lang="es">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>Mapa interactivo – Tramos de Alta Siniestralidad RVN</title>
 
-<!-- Leaflet -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
-<!-- Plugins -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.polylinemeasure/Leaflet.PolylineMeasure.css"/>
 
 <style>
-html, body { height:100%; margin:0; }
-#map { height:100vh; width:100%; }
-
-.legend{
-  background:rgba(255,255,255,0.95);
-  padding:10px 12px;
-  border-radius:8px;
-  box-shadow:0 2px 10px rgba(0,0,0,0.15);
-  font:12px/1.35 system-ui, Arial;
-}
-.legend-title{ font-weight:700; margin-bottom:6px; }
-.legend-row{ display:flex; align-items:center; gap:8px; margin:4px 0; }
-.swatch{
-  width:14px; height:14px;
-  border-radius:3px;
-  border:1px solid rgba(0,0,0,0.25);
-}
-.legend-body{ max-height:240px; overflow-y:auto; }
-
-.tool-box input, .coord-box input{
-  width:160px;
-  padding:6px;
-  margin:4px 0;
-}
-.tool-box button, .coord-box button{
-  width:100%;
-  padding:6px;
-  cursor:pointer;
+/* ==================================================
+   FIX DE ESTILOS Y RESPONSIVE
+================================================== */
+html, body { 
+    height: 100%; 
+    width: 100%; 
+    margin: 0; 
+    padding: 0;
+    overflow: hidden; /* Evita scrollbars dobles */
 }
 
+#map { 
+    width: 100%;
+    height: 100vh;      /* Fallback navegadores viejos */
+    height: 100dvh;     /* Altura dinámica real para móviles modernos */
+    background: #ddd;   /* Color de fondo mientras carga */
+}
+
+/* Estilos de la Leyenda */
+.legend {
+    background: rgba(255,255,255,0.95);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    font: 12px/1.35 system-ui, Arial, sans-serif;
+    padding: 0; 
+    max-width: 250px;
+    max-height: 80vh; /* Nunca más alto que el 80% de la pantalla */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Importante para el efecto de colapsar */
+    transition: all 0.3s ease; /* Animación suave */
+}
+
+/* Cabecera clickeable para colapsar */
+.legend-header {
+    padding: 10px 12px;
+    font-weight: 700;
+    margin-bottom: 0;
+    background: #f8f9fa;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.legend-header:hover { background: #f0f0f0; }
+
+/* Cuerpo de la leyenda con scroll si es muy alto */
+.legend-body {
+    padding: 10px 12px;
+    overflow-y: auto;
+    max-height: 300px;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+/* Estado Colapsado */
+.legend.collapsed {
+    width: auto;
+}
+.legend.collapsed .legend-body {
+    display: none;
+    padding: 0;
+    max-height: 0;
+    opacity: 0;
+}
+.legend.collapsed .legend-header {
+    border-bottom: none;
+}
+
+/* Resto de estilos originales */
+.legend-title { font-weight:700; margin-bottom:6px; margin-top: 8px; }
+.legend-title:first-child { margin-top: 0; }
+.legend-row { display:flex; align-items:center; gap:8px; margin:4px 0; }
+.swatch {
+    width:14px; height:14px;
+    border-radius:3px;
+    border:1px solid rgba(0,0,0,0.25);
+    flex-shrink: 0;
+}
+
+.tool-box input, .coord-box input{ width:160px; padding:6px; margin:4px 0; }
+.tool-box button, .coord-box button{ width:100%; padding:6px; cursor:pointer; }
+
+/* Media Query para Celulares */
 @media (max-width:768px){
-  .legend{ max-height:40vh; overflow-y:auto; }
+    .legend { 
+        max-width: 200px; 
+        margin-left: 10px !important;
+        margin-bottom: 25px !important; /* Separar del borde inferior */
+    }
+    .legend-body { max-height: 40vh; }
+    /* Ajustar control de capas nativo */
+    .leaflet-control-layers { max-width: 220px; }
 }
 </style>
 </head>
@@ -52,7 +112,6 @@ html, body { height:100%; margin:0; }
 <body>
 <div id="map"></div>
 
-<!-- JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.js"></script>
 <script src="https://unpkg.com/leaflet.polylinemeasure/Leaflet.PolylineMeasure.js"></script>
@@ -69,6 +128,8 @@ function mustOk(r,n){ if(!r.ok) throw new Error('Error '+n); return r; }
 /* ==================================================
    MAPA BASE
 ================================================== */
+// ZoomControl false inicial para moverlo de posición si gustas, o dejarlo por defecto.
+// Aquí lo dejo por defecto pero puedes cambiarlo.
 var map = L.map('map').setView([-9.2,-75],6);
 
 var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
@@ -77,11 +138,13 @@ var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
 
 L.control.scale({metric:true, imperial:false}).addTo(map);
 
+// Minimap
 new L.Control.MiniMap(osm,{
-  minimized:true,
+  minimized:true, // Minimizado por defecto en móvil para ahorrar espacio
   toggleDisplay:true
 }).addTo(map);
 
+// Medidas
 L.control.polylineMeasure({
   position:'topleft',
   unit:'metres'
@@ -96,7 +159,7 @@ L.simpleMapScreenshoter({
 }).addTo(map);
 
 /* ==================================================
-   PANES
+   PANES (Orden de visualización Z-Index)
 ================================================== */
 ['Concesiones','Departamentos','RVN','Clusters','Tramos'].forEach(function(p,i){
   map.createPane('pane'+p);
@@ -116,13 +179,13 @@ function colorByFallecidos(v){
 }
 
 /* ==================================================
-   CAPAS (NO se redefinen)
+   CAPAS (Variables Originales)
 ================================================== */
-var clustersLayer = L.geoJSON(null,{pane:'paneClusters'}).addTo(map);
-var tramosLayer   = L.geoJSON(null,{pane:'paneTramos'});
-var concesionesLayer = L.geoJSON(null,{pane:'paneConcesiones'}).addTo(map);
+var clustersLayer      = L.geoJSON(null,{pane:'paneClusters'}).addTo(map);
+var tramosLayer        = L.geoJSON(null,{pane:'paneTramos'}); // Off por defecto para limpieza visual
+var concesionesLayer   = L.geoJSON(null,{pane:'paneConcesiones'}).addTo(map);
 var departamentosLayer = L.geoJSON(null,{pane:'paneDepartamentos'}).addTo(map);
-var rvnLayer = L.geoJSON(null,{pane:'paneRVN'}).addTo(map);
+var rvnLayer           = L.geoJSON(null,{pane:'paneRVN'}).addTo(map);
 
 /* ==================================================
    CONTROL DE CAPAS
@@ -133,16 +196,52 @@ var layerControl = L.control.layers(null,{
   'Concesiones': concesionesLayer,
   'Departamentos': departamentosLayer,
   'Red Vial Nacional': rvnLayer
-},{collapsed:false}).addTo(map);
+},{
+    collapsed: true // Colapsado por defecto para móviles
+}).addTo(map);
 
 /* ==================================================
-   ÍNDICES PARA INTERACCIÓN
+   LEYENDA INTERACTIVA (HTML Custom + Collapse)
+================================================== */
+var legend = L.control({position: 'bottomleft'});
+
+legend.onAdd = function (map) {
+    var div = L.DomUtil.create('div', 'legend');
+    
+    // HTML Estructurado
+    div.innerHTML = `
+        <div class="legend-header" onclick="this.parentElement.classList.toggle('collapsed')">
+            <span>Leyenda Siniestros</span>
+            <span style="font-size:10px">▼</span>
+        </div>
+        <div class="legend-body">
+            <div class="legend-title">Fallecidos por Cluster</div>
+            <div class="legend-row"><div class="swatch" style="background:#67000d"></div> > 20</div>
+            <div class="legend-row"><div class="swatch" style="background:#a50f15"></div> 16 - 20</div>
+            <div class="legend-row"><div class="swatch" style="background:#de2d26"></div> 11 - 15</div>
+            <div class="legend-row"><div class="swatch" style="background:#fb6a4a"></div> 6 - 10</div>
+            <div class="legend-row"><div class="swatch" style="background:#fee5d9"></div> 1 - 5</div>
+            
+            <div class="legend-title">Infraestructura</div>
+            <div class="legend-row"><div class="swatch" style="background:#1f78b4; height:4px; border:none"></div> Tramo Crítico</div>
+            <div class="legend-row"><div class="swatch" style="background:rgba(255, 165, 0, 0.4); border:1px solid orange"></div> Concesión</div>
+            <div class="legend-row"><div class="swatch" style="background:transparent; border:2px dashed #555"></div> Dpto.</div>
+        </div>
+    `;
+    
+    // Evitar que el click en la leyenda mueva el mapa
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+};
+
+legend.addTo(map);
+
+/* ==================================================
+   CARGA DE DATOS (FETCH DE LOS 5 ARCHIVOS)
 ================================================== */
 var clusterTotals={}, tramosIndex={}, clusterPoints={};
 
-/* ==================================================
-   TRAMOS
-================================================== */
+// 1. TRAMOS
 fetch('data/tramos-siniestros.geojson')
 .then(r=>mustOk(r,'tramos')).then(r=>r.json())
 .then(j=>{
@@ -154,18 +253,13 @@ fetch('data/tramos-siniestros.geojson')
       var cid = f.properties.CLUSTER_ID ?? '-';
       if(!tramosIndex[cid]) tramosIndex[cid]=[];
       tramosIndex[cid].push(l);
-      l.bindTooltip(
-        '<b>Cluster:</b> '+cid+
-        '<br><b>DGL:</b> '+(f.properties.DGL||'-'),
-        {sticky:true}
-      );
+      // Popup es mejor para móvil que Tooltip
+      l.bindPopup('<b>Cluster:</b> '+cid+'<br><b>DGL:</b> '+(f.properties.DGL||'-'));
     }
   }).eachLayer(l=>tramosLayer.addLayer(l));
 });
 
-/* ==================================================
-   CLUSTERS
-================================================== */
+// 2. CLUSTERS
 fetch('data/clusters.geojson')
 .then(r=>mustOk(r,'clusters')).then(r=>r.json())
 .then(j=>{
@@ -181,7 +275,7 @@ fetch('data/clusters.geojson')
     pointToLayer:(f,latlng)=>{
       var cid=f.properties.CLUSTER_ID;
       return L.circleMarker(latlng,{
-        radius:6,
+        radius:7, // Un poco más grande para click táctil
         fillColor:colorByFallecidos(clusterTotals[cid]),
         color:'#111',weight:1,fillOpacity:.8
       });
@@ -191,28 +285,69 @@ fetch('data/clusters.geojson')
       if(!clusterPoints[cid]) clusterPoints[cid]=[];
       clusterPoints[cid].push(l);
 
-      l.bindTooltip(
+      // Popup en vez de Tooltip fijo para no tapar móvil
+      l.bindPopup(
         '<b>Cluster:</b> '+cid+
-        '<br><b>Fallecidos:</b> '+fmtInt(clusterTotals[cid]),
-        {sticky:true}
+        '<br><b>Fallecidos:</b> '+fmtInt(clusterTotals[cid])
       );
 
+      // Mouseover solo funciona en PC, pero se deja por compatibilidad
       l.on('mouseover',()=>{
         (tramosIndex[cid]||[]).forEach(t=>{
           t.setStyle({color:'#08306b',weight:8});
+          if(!map.hasLayer(tramosLayer)) t.addTo(map);
         });
       });
       l.on('mouseout',()=>{
         (tramosIndex[cid]||[]).forEach(t=>{
           t.setStyle({color:'#1f78b4',weight:5});
+          if(!map.hasLayer(tramosLayer)) map.removeLayer(t);
         });
       });
     }
   }).eachLayer(l=>clustersLayer.addLayer(l));
-
   map.fitBounds(clustersLayer.getBounds(),{padding:[20,20]});
 });
+
+// 3. CONCESIONES
+fetch('data/concesiones.geojson')
+.then(r=>mustOk(r,'concesiones')).then(r=>r.json())
+.then(j=>{
+    concesionesLayer.clearLayers();
+    L.geoJSON(j, {
+        pane: 'paneConcesiones',
+        style: { color: 'orange', weight: 1, fillOpacity: 0.1 },
+        onEachFeature: function(f,l){
+            l.bindPopup(f.properties.NOMBRE || f.properties.Concesion || 'Concesión');
+        }
+    }).eachLayer(l=>concesionesLayer.addLayer(l));
+})
+.catch(err => console.error("Error cargando concesiones:", err));
+
+// 4. DEPARTAMENTOS
+fetch('data/departamentos.geojson')
+.then(r=>mustOk(r,'departamentos')).then(r=>r.json())
+.then(j=>{
+    departamentosLayer.clearLayers();
+    L.geoJSON(j, {
+        pane: 'paneDepartamentos',
+        style: { color: '#555', weight: 2, fill: false, dashArray: '5, 5' }
+    }).eachLayer(l=>departamentosLayer.addLayer(l));
+})
+.catch(err => console.error("Error cargando departamentos:", err));
+
+// 5. RVN (Red Vial Nacional)
+fetch('data/rvn.geojson')
+.then(r=>mustOk(r,'rvn')).then(r=>r.json())
+.then(j=>{
+    rvnLayer.clearLayers();
+    L.geoJSON(j, {
+        pane: 'paneRVN',
+        style: { color: '#888', weight: 1 }
+    }).eachLayer(l=>rvnLayer.addLayer(l));
+})
+.catch(err => console.error("Error cargando RVN:", err));
+
 </script>
 </body>
 </html>
-
