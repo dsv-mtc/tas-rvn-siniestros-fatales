@@ -126,6 +126,14 @@ html, body { height:100%; margin:0; }
   }
 }
 
+.leaflet-control-scale{
+  z-index: 900 !important;
+}
+
+.leaflet-control-minimap{
+  z-index: 850 !important;
+}
+
 </style>
 </head>
 
@@ -317,7 +325,7 @@ L.control.layers(null,{
 //////////////////////////////////////////////////
 // LEYENDA UNIFICADA Y SEGURA
 //////////////////////////////////////////////////
-var legend=L.control({position:'bottomleft'});
+var legend=L.control({position:'topright'});
 
 function construirLeyenda(){
   legend.onAdd = function(){
