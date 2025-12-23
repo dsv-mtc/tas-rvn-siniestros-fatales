@@ -36,10 +36,11 @@ html, body { height:100%; margin:0; }
 
 .legend-body{
   padding:10px 12px;
-  max-height:28vh;
+  max-height:45vh;
   overflow:auto;
+  -webkit-overflow-scrolling: touch;
 }
-  
+
 .legend-title{
   font-weight:700;
   margin:10px 0 6px;
@@ -65,6 +66,16 @@ html, body { height:100%; margin:0; }
   border:2px dashed #333;
   height:10px;
 }
+/* Estado colapsado: oculta el cuerpo */
+.legend.collapsed .legend-body{
+  display: none;
+}
+
+/* Indicador visual */
+.legend-header span{
+  font-size:14px;
+  opacity:0.7;
+}
 
 @media (max-width: 768px){
 
@@ -72,6 +83,7 @@ html, body { height:100%; margin:0; }
   .legend{
     width:90vw;
     max-width:300px;
+     position:relative;
   }
 
   .legend-header{
@@ -79,12 +91,7 @@ html, body { height:100%; margin:0; }
     font-size:12px;
   }
 
-  .legend-body{
-    max-height:28vh;
-    padding:6px 10px;
-  }
-
-  .legend-title{
+   .legend-title{
     margin:6px 0 4px;
     font-size:11px;
   }
@@ -105,35 +112,14 @@ html, body { height:100%; margin:0; }
   }
 }
 
-/* Estado colapsado: oculta el cuerpo */
-.legend.collapsed .legend-body{
-  display: none;
-}
-
-/* Indicador visual */
-.legend-header span{
-  font-size:14px;
-  opacity:0.7;
-}
-
-/* En móvil: iniciar colapsada */
-@media (max-width: 768px){
-  .legend{
-    position: relative;
-  }
-  .legend.collapsed .legend-body{
-    display: none;
-  }
-}
-
+/* Escala y minimap visibles */
 .leaflet-control-scale{
-  z-index: 900 !important;
+  z-index:1100 !important;
 }
-
 .leaflet-control-minimap{
-  z-index: 850 !important;
+  z-index:1050 !important;
 }
-
+  
 </style>
 </head>
 
@@ -325,17 +311,24 @@ L.control.layers(null,{
 //////////////////////////////////////////////////
 // LEYENDA UNIFICADA Y SEGURA
 //////////////////////////////////////////////////
-var legend=L.control({position:'topright'});
+function isMobile(){ return window.innerWidth < 768; }
+var legend = L.control({ position: isMobile() ? 'topright' : 'bottomleft' });
 
 function construirLeyenda(){
   legend.onAdd = function(){
     var d = L.DomUtil.create('div','legend');
-    d.classList.add('collapsed');
-
+    
     var header = L.DomUtil.create('div','legend-header', d);
     header.innerHTML = 'LEYENDA <span>☰</span>';
 
+    header.setAttribute('role','button');
+    header.setAttribute('aria-label','Mostrar u ocultar leyenda');
+
+
     var body = L.DomUtil.create('div','legend-body', d);
+    // Evitar que el scroll de la leyenda mueva el mapa (clave en celular)
+    L.DomEvent.disableScrollPropagation(body);
+    L.DomEvent.disableClickPropagation(d);
 
     body.innerHTML += `
       <div class="legend-title">Fallecidos por clúster</div>
@@ -374,6 +367,7 @@ function construirLeyenda(){
   };
   legend.addTo(map);
 }
+  
 </script>
 </body>
 </html>
