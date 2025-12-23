@@ -203,7 +203,7 @@ html, body { height:100%; margin:0; }
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.polylinemeasure/Leaflet.PolylineMeasure.js"></script>
 <script src="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.js"></script>
-<script src="https://unpkg.com/leaflet-image/leaflet-image.js"></script>
+<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   
 <script>
 //////////////////////////////////////////////////
@@ -215,7 +215,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
   attribution:'&copy; OpenStreetMap contributors'
 }).addTo(map);
 
-// Botón Exportar Imagen
+// 📸 Exportar imagen COMPLETA (mapa + capas + leyenda + logos)
 var exportImgControl = L.control({ position: 'topright' });
 exportImgControl.onAdd = function () {
   var div = L.DomUtil.create('div', 'legend');
@@ -229,15 +229,18 @@ exportImgControl.onAdd = function () {
   L.DomEvent.on(btn, 'click', function (e) {
     L.DomEvent.stopPropagation(e);
 
-    leafletImage(map, function(err, canvas) {
-      if (err) {
-        alert('Error al exportar imagen');
-        return;
-      }
-      var img = document.createElement('a');
-      img.href = canvas.toDataURL('image/png');
-      img.download = 'mapa_tramos_alta_siniestralidad.png';
-      img.click();
+    html2canvas(document.getElementById('map'), {
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      scale: 2
+    }).then(function(canvas){
+      var link = document.createElement('a');
+      link.href = canvas.toDataURL('image/png');
+      link.download = 'mapa_tramos_alta_siniestralidad.png';
+      link.click();
+    }).catch(function(err){
+      alert('Error al exportar imagen');
+      console.error(err);
     });
   });
 
