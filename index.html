@@ -276,7 +276,7 @@ exportImgControl.addTo(map);
 
 var logosControl = L.control({ position: 'bottomright' });
 logosControl.onAdd = function () {
-  var div = L.DomUtil.create('div', 'logo-box no-export');
+  var div = L.DomUtil.create('div', 'logo-box');
 
   div.innerHTML = `
     <img src="assets/logo_mtc.png" alt="MTC">
