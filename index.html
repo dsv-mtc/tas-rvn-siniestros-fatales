@@ -203,7 +203,8 @@ html, body { height:100%; margin:0; }
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.polylinemeasure/Leaflet.PolylineMeasure.js"></script>
 <script src="https://unpkg.com/leaflet-minimap/dist/Control.MiniMap.min.js"></script>
-<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://unpkg.com/leaflet-image/leaflet-image.js"></script>
+
   
 <script>
 //////////////////////////////////////////////////
@@ -218,71 +219,65 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
 // 📸 Exportar imagen COMPLETA (mapa + capas + leyenda + logos)
 var exportImgControl = L.control({ position: 'topright' });
 exportImgControl.onAdd = function () {
-  var div = L.DomUtil.create('div', 'legend no-export');
+var div = L.DomUtil.create('div', 'no-export');
   div.style.padding = '6px';
+  div.style.background = 'white';
+  div.style.borderRadius = '6px';
+  div.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
 
   var btn = L.DomUtil.create('button', '', div);
   btn.innerHTML = '📸 Exportar imagen';
   btn.style.cursor = 'pointer';
   btn.style.width = '100%';
 
-  L.DomEvent.on(btn, 'click', function (e) {
+L.DomEvent.on(btn, 'click', function (e) {
   L.DomEvent.stopPropagation(e);
 
-  // 1. Ocultar controles que no deben salir en la imagen
+  // 1. Ocultar controles que NO deben salir en la imagen
   document.querySelectorAll('.no-export').forEach(el => {
-    el.style.visibility = 'hidden';
+    el.style.display = 'none';
   });
 
-  // 2. Forzar a Leaflet a recalcular (clave para que no se descuadre)
-  map.invalidateSize();
+  // 2. Forzar render correcto de Leaflet
+  map.invalidateSize(true);
 
-  // 3. Esperar a que Leaflet termine de renderizar
+  // 3. Esperar render (CLAVE)
   setTimeout(function () {
 
-    html2canvas(document.getElementById('map'), {
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      scale: 2
-    }).then(function(canvas){
+    leafletImage(map, function (err, canvas) {
+        if (err) {
+          alert('Error al exportar imagen');
+          console.error(err);
+          return;
+        }
 
-      var link = document.createElement('a');
-      link.href = canvas.toDataURL('image/png');
-      link.download = 'mapa_tramos_alta_siniestralidad.png';
-      link.click();
+       var link = document.createElement('a');
+       link.href = canvas.toDataURL('image/png');
+       link.download = 'mapa_tramos_alta_siniestralidad.png';
+       link.click();
 
-      // 4. Restaurar controles
-      document.querySelectorAll('.no-export').forEach(el => {
-        el.style.visibility = 'visible';
+     // 4. Restaurar controles
+     document.querySelectorAll('.no-export').forEach(el => {
+      el.style.display = '';
+        });
       });
 
-    }).catch(function(err){
-      alert('Error al exportar imagen');
-      console.error(err);
-
-      // Asegurar restauración
-      document.querySelectorAll('.no-export').forEach(el => {
-        el.style.visibility = 'visible';
-      });
-    });
-
-  }, 300); // tiempo suficiente para Leaflet
-});
+    }, 150);
+  });
 
   L.DomEvent.disableClickPropagation(div);
   return div;
 };
 exportImgControl.addTo(map);
 
+// Logos institucionales (SÍ salen en la imagen)
 var logosControl = L.control({ position: 'bottomright' });
 logosControl.onAdd = function () {
   var div = L.DomUtil.create('div', 'logo-box');
-
   div.innerHTML = `
-    <img src="assets/logo_mtc.png" alt="MTC">
-    <img src="assets/logo_onsv.png" alt="ONSV">
+    <img src="assets/logo_mtc.png" alt="MTC" style="height:40px;margin-right:6px;">
+    <img src="assets/logo_onsv.png" alt="ONSV" style="height:40px;">
   `;
-
   L.DomEvent.disableClickPropagation(div);
   return div;
 };
