@@ -218,7 +218,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
 // 📸 Exportar imagen COMPLETA (mapa + capas + leyenda + logos)
 var exportImgControl = L.control({ position: 'topright' });
 exportImgControl.onAdd = function () {
-  var div = L.DomUtil.create('div', 'legend');
+  var div = L.DomUtil.create('div', 'legend no-export');
   div.style.padding = '6px';
 
   var btn = L.DomUtil.create('button', '', div);
@@ -227,22 +227,47 @@ exportImgControl.onAdd = function () {
   btn.style.width = '100%';
 
   L.DomEvent.on(btn, 'click', function (e) {
-    L.DomEvent.stopPropagation(e);
+  L.DomEvent.stopPropagation(e);
+
+  // 1. Ocultar controles que no deben salir en la imagen
+  document.querySelectorAll('.no-export').forEach(el => {
+    el.style.visibility = 'hidden';
+  });
+
+  // 2. Forzar a Leaflet a recalcular (clave para que no se descuadre)
+  map.invalidateSize();
+
+  // 3. Esperar a que Leaflet termine de renderizar
+  setTimeout(function () {
 
     html2canvas(document.getElementById('map'), {
       useCORS: true,
       backgroundColor: '#ffffff',
       scale: 2
     }).then(function(canvas){
+
       var link = document.createElement('a');
       link.href = canvas.toDataURL('image/png');
       link.download = 'mapa_tramos_alta_siniestralidad.png';
       link.click();
+
+      // 4. Restaurar controles
+      document.querySelectorAll('.no-export').forEach(el => {
+        el.style.visibility = 'visible';
+      });
+
     }).catch(function(err){
       alert('Error al exportar imagen');
       console.error(err);
+
+      // Asegurar restauración
+      document.querySelectorAll('.no-export').forEach(el => {
+        el.style.visibility = 'visible';
+      });
     });
-  });
+
+  }, 300); // tiempo suficiente para Leaflet
+});
 
   L.DomEvent.disableClickPropagation(div);
   return div;
@@ -251,7 +276,7 @@ exportImgControl.addTo(map);
 
 var logosControl = L.control({ position: 'bottomright' });
 logosControl.onAdd = function () {
-  var div = L.DomUtil.create('div', 'logo-box');
+  var div = L.DomUtil.create('div', 'logo-box no-export');
 
   div.innerHTML = `
     <img src="assets/logo_mtc.png" alt="MTC">
