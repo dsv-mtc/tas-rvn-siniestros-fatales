@@ -40,11 +40,6 @@ html, body { height:100%; margin:0; }
   overflow:auto;
 }
 
-.legend-body{
-  max-height:28vh;
-  overflow:auto;
-}
-
 .legend-title{
   font-weight:700;
   margin:10px 0 6px;
@@ -107,6 +102,27 @@ html, body { height:100%; margin:0; }
   /* Que inicie colapsada (clave en móvil) */
   .legend{
     max-height:none;
+  }
+}
+
+/* Estado colapsado: oculta el cuerpo */
+.legend.collapsed .legend-body{
+  display: none;
+}
+
+/* Indicador visual */
+.legend-header span{
+  font-size:14px;
+  opacity:0.7;
+}
+
+/* En móvil: iniciar colapsada */
+@media (max-width: 768px){
+  .legend{
+    position: relative;
+  }
+  .legend.collapsed .legend-body{
+    display: none;
   }
 }
 
@@ -342,6 +358,10 @@ function construirLeyenda(){
       d.classList.toggle('collapsed');
     });
 
+    if (window.innerWidth < 768){
+      d.classList.add('collapsed');
+    }
+
     return d;
   };
   legend.addTo(map);
@@ -349,5 +369,3 @@ function construirLeyenda(){
 </script>
 </body>
 </html>
-
-codigo que si funciona
