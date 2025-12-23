@@ -119,7 +119,55 @@ html, body { height:100%; margin:0; }
 .leaflet-control-minimap{
   z-index:1050 !important;
 }
-  
+
+/* ===== FIX CONTROLES EN MÓVIL ===== */
+
+/* Escala siempre visible */
+.leaflet-control-scale {
+  z-index: 1100 !important;
+}
+
+/* MiniMap por debajo de la leyenda pero visible */
+.leaflet-control-minimap {
+  z-index: 1000 !important;
+}
+
+/* En móvil, empujar controles hacia arriba */
+@media (max-width: 768px){
+  .leaflet-bottom.leaflet-right {
+    bottom: 90px; /* deja espacio para la leyenda */
+  }
+  .leaflet-bottom.leaflet-left {
+    bottom: 90px;
+  }
+}
+
+/* ===== FIX CONTROLES EN MÓVIL ===== */
+
+/* Escala siempre visible */
+.leaflet-control-scale{
+  z-index: 1100 !important;
+}
+
+/* MiniMap visible pero debajo de la leyenda */
+.leaflet-control-minimap{
+  z-index: 1000 !important;
+}
+
+/* MiniMap más pequeño en celular */
+@media (max-width: 768px){
+  .minimap-mobile{
+    transform: scale(0.85);
+    transform-origin: bottom right;
+  }
+
+  /* Empujar controles hacia arriba para no chocar con la leyenda */
+  .leaflet-bottom.leaflet-right,
+  .leaflet-bottom.leaflet-left{
+    bottom: 90px;
+  }
+}
+
 </style>
 </head>
 
@@ -159,6 +207,14 @@ new L.Control.MiniMap(
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'),
   {toggleDisplay:true, minimized:true}
 ).addTo(map);
+
+// Ajustes específicos para móvil (MiniMap)
+if (window.innerWidth < 768) {
+  const mm = document.querySelector('.leaflet-control-minimap');
+  if (mm) {
+    mm.classList.add('minimap-mobile');
+  }
+}
 
 //////////////////////////////////////////////////
 // PANES
