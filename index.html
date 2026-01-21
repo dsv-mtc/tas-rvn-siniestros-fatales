@@ -14,6 +14,74 @@
 html, body { height:100%; margin:0; }
 #map { height:100vh; width:100%; }
 
+/* ================= BUSCADORES ================= */
+.search-control{
+  background:rgba(255,255,255,0.95);
+  border-radius:6px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.2);
+  overflow:visible;
+  font:12px/1.3 system-ui, Arial;
+  position:relative;
+  z-index:1200;
+}
+.search-toggle{
+  padding:6px 8px;
+  cursor:pointer;
+  text-align:center;
+  background:#f4f4f4;
+}
+.search-toggle svg{
+  width:16px;
+  height:16px;
+  display:inline-block;
+  vertical-align:middle;
+}
+.search-panel{
+  display:block;
+  padding:8px;
+  width:220px;
+  position:relative;
+}
+.search-panel.collapsed{
+  display:none;
+}
+.search-panel label{
+  display:block;
+  margin:6px 0 2px;
+  font-weight:600;
+}
+.search-panel input{
+  width:100%;
+  padding:6px;
+  box-sizing:border-box;
+  border:1px solid #ccc;
+  border-radius:4px;
+}
+.search-panel button{
+  margin-top:8px;
+  width:100%;
+  padding:6px;
+  border:none;
+  border-radius:4px;
+  background:#2c7fb8;
+  color:#fff;
+  cursor:pointer;
+}
+.search-panel button.search-clear{
+  background:#6b7280;
+}
+.search-message{
+  margin-top:6px;
+  color:#b00020;
+  display:none;
+}
+
+/* Buscador estilo index con icono de ubicacion */
+.leaflet-control-geocoder-icon{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3c-3.3 0-6 2.7-6 6 0 4.5 6 12 6 12s6-7.5 6-12c0-3.3-2.7-6-6-6z' fill='none' stroke='%23333' stroke-width='2'/%3E%3Ccircle cx='12' cy='9' r='2.5' fill='none' stroke='%23333' stroke-width='2'/%3E%3C/svg%3E");
+  background-size:18px 18px;
+}
+
 /* ================= LEYENDA ================= */
 .legend{
   background:rgba(255,255,255,0.95);
@@ -304,11 +372,22 @@ L.control.polylineMeasure({
 }).addTo(map);
 
 //////////////////////////////////////////////////
-// BUSCADOR (DIRECCIONES Y COORDENADAS)
+// BUSCADOR (DIRECCIONES, CLUSTERS Y CONCESIONES)
 //////////////////////////////////////////////////
-var geocoder = L.Control.geocoder({
+var searchLayer = L.layerGroup().addTo(map);
+
+var clusterToggle;
+var clusterPanel;
+var clusterSearchBtn;
+var clusterClearBtn;
+var clusterMessage;
+var clusterIdInput;
+var clusterOrdenInput;
+var concesionInput;
+
+L.Control.geocoder({
   defaultMarkGeocode: true,
-  position: 'topleft', // Se ubicará arriba a la izquierda (debajo de la regla)
+  position: 'topleft',
   placeholder: 'Buscar lugar o lat,lng...',
   errorMessage: 'No se encontró nada.'
 })
@@ -324,11 +403,297 @@ var geocoder = L.Control.geocoder({
 })
 .addTo(map);
 
-L.control.scale({
-  position:'bottomright',
-  metric:true,
-  imperial:false
-}).addTo(map);
+var clusterControl = L.control({ position: 'topleft' });
+clusterControl.onAdd = function(){
+  var div = L.DomUtil.create('div','search-control');
+  div.innerHTML = `
+    <div class="search-toggle" title="Buscar clusters y concesiones" aria-label="Buscar clusters y concesiones">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" fill="none" stroke="#333" stroke-width="2"></circle>
+        <line x1="16.5" y1="16.5" x2="21" y2="21" stroke="#333" stroke-width="2" stroke-linecap="round"></line>
+      </svg>
+    </div>
+    <div class="search-panel collapsed">
+      <label>Buscar segun ID_Cluster</label>
+      <input type="text" id="search-cluster-id" placeholder="ID_Cluster">
+      <label>Buscar segun No. Cluster segun DGL</label>
+      <input type="text" id="search-cluster-orden" placeholder="No. Cluster segun DGL">
+      <label>Buscar Concesion</label>
+      <input type="text" id="search-concesion" placeholder="Concesion">
+      <button id="cluster-search-btn" type="button">Buscar</button>
+      <button id="cluster-clear" class="search-clear" type="button">Limpiar</button>
+      <div class="search-message" id="cluster-message"></div>
+    </div>
+  `;
+  clusterToggle = div.querySelector('.search-toggle');
+  clusterPanel = div.querySelector('.search-panel');
+  clusterSearchBtn = div.querySelector('#cluster-search-btn');
+  clusterClearBtn = div.querySelector('#cluster-clear');
+  clusterMessage = div.querySelector('#cluster-message');
+  clusterIdInput = div.querySelector('#search-cluster-id');
+  clusterOrdenInput = div.querySelector('#search-cluster-orden');
+  concesionInput = div.querySelector('#search-concesion');
+
+  clusterToggle.addEventListener('click', function(){
+    clusterPanel.classList.toggle('collapsed');
+  });
+
+  [clusterIdInput, clusterOrdenInput, concesionInput].forEach(input => {
+    input.addEventListener('keydown', function(e){
+      if(e.key === 'Enter'){
+        performClusterSearch();
+      }
+    });
+  });
+
+  clusterSearchBtn.addEventListener('click', performClusterSearch);
+  clusterClearBtn.addEventListener('click', function(){
+    clearSearch(true);
+  });
+  L.DomEvent.disableClickPropagation(div);
+  return div;
+};
+clusterControl.addTo(map);
+
+map.on('click', function(){
+  if(clusterPanel && !clusterPanel.classList.contains('collapsed')){
+    clusterPanel.classList.add('collapsed');
+  }
+});
+
+function showClusterMessage(msg){
+  if(msg){
+    clusterMessage.textContent = msg;
+    clusterMessage.style.display = 'block';
+    return;
+  }
+  clusterMessage.textContent = '';
+  clusterMessage.style.display = 'none';
+}
+
+function flattenLatLngs(latlngs, out){
+  if(!Array.isArray(latlngs)) return;
+  if(latlngs.length && latlngs[0].lat !== undefined){
+    latlngs.forEach(ll => out.push(ll));
+    return;
+  }
+  latlngs.forEach(ll => flattenLatLngs(ll, out));
+}
+
+function getNearestLatLngInLayer(layer, target){
+  var points = [];
+  flattenLatLngs(layer.getLatLngs(), points);
+  if(!points.length){
+    return target;
+  }
+  var best = points[0];
+  var bestDist = map.distance(target, best);
+  points.forEach(p => {
+    var d = map.distance(target, p);
+    if(d < bestDist){
+      best = p;
+      bestDist = d;
+    }
+  });
+  return best;
+}
+
+function getCenteredClusterLatLng(entry){
+  if(!entry || !entry.markers || !entry.markers.length){
+    return null;
+  }
+  var center = entry.bounds.getCenter();
+  var best = entry.markers[0].getLatLng();
+  var bestDist = map.distance(center, best);
+  entry.markers.forEach(m => {
+    var ll = m.getLatLng();
+    var d = map.distance(center, ll);
+    if(d < bestDist){
+      best = ll;
+      bestDist = d;
+    }
+  });
+  return best;
+}
+
+function createSearchMarker(latlng, html, markerType){
+  var marker;
+  if(markerType === 'pin'){
+    marker = L.marker(latlng);
+  }else{
+    marker = L.circleMarker(latlng, {
+      radius:7,
+      color:'#111',
+      weight:2,
+      fillColor:'#fff',
+      fillOpacity:0.9
+    });
+  }
+  marker.bindPopup(html, { autoClose:false, closeOnClick:false });
+  marker.on('popupclose', function(){
+    searchLayer.removeLayer(marker);
+  });
+  searchLayer.addLayer(marker);
+  marker.openPopup();
+}
+
+function applySearchResults(results){
+  var combined = null;
+  results.forEach(r => {
+    if(r.layer && r.latlng && r.html){
+      r.layer.bindPopup(r.html);
+      r.layer.openPopup(r.latlng);
+    }else if(r.latlng && r.html){
+      createSearchMarker(r.latlng, r.html, r.markerType);
+    }
+    if(r.bounds){
+      if(!combined){
+        combined = r.bounds;
+      }else{
+        combined.extend(r.bounds);
+      }
+    }
+  });
+  if(combined){
+    map.fitBounds(combined, {padding:[30,30]});
+  }
+}
+
+function findClusterById(query){
+  var key = String(query).trim();
+  if(!key){
+    return null;
+  }
+  var entry = clusterIndex[key];
+  if(!entry){
+    return null;
+  }
+  var ll = getCenteredClusterLatLng(entry);
+  if(!ll){
+    return null;
+  }
+  return {
+    bounds: L.latLngBounds(ll, ll),
+    latlng: ll,
+    markerType: 'pin',
+    html: clusterTooltipHtml(key)
+  };
+}
+
+function findClusterByOrden(query){
+  var orden = String(query).trim();
+  if(!orden){
+    return null;
+  }
+  var idKey = clusterOrderReverse[orden];
+  if(idKey == null){
+    return null;
+  }
+  var entry = clusterIndex[String(idKey)];
+  if(!entry){
+    return null;
+  }
+  var ll = getCenteredClusterLatLng(entry);
+  if(!ll){
+    return null;
+  }
+  return {
+    bounds: L.latLngBounds(ll, ll),
+    latlng: ll,
+    markerType: 'pin',
+    html: clusterTooltipHtml(String(idKey))
+  };
+}
+
+function findConcesion(query){
+  var q = String(query).trim().toLowerCase();
+  if(!q){
+    return null;
+  }
+  var keys = Object.keys(concesionIndex);
+  var match = keys.find(k => k.toLowerCase() === q);
+  if(!match){
+    match = keys.find(k => k.toLowerCase().includes(q));
+  }
+  if(!match){
+    return null;
+  }
+  var layer = concesionIndex[match][0];
+  if(!layer){
+    return null;
+  }
+  var bounds = layer.getBounds();
+  var center = bounds.getCenter();
+  var anchor = getNearestLatLngInLayer(layer, center);
+  return {
+    bounds: bounds,
+    latlng: anchor,
+    html: '<b>Concesion:</b> ' + match,
+    layer: layer
+  };
+}
+
+function clearSearch(clearInputs){
+  searchLayer.clearLayers();
+  map.closePopup();
+  showClusterMessage('');
+  if(clearInputs){
+    clusterIdInput.value = '';
+    clusterOrdenInput.value = '';
+    concesionInput.value = '';
+  }
+}
+
+function performClusterSearch(){
+  var clusterIdQuery = clusterIdInput.value.trim();
+  var clusterOrdenQuery = clusterOrdenInput.value.trim();
+  var concesionQuery = concesionInput.value.trim();
+
+  if(!clusterIdQuery && !clusterOrdenQuery && !concesionQuery){
+    showClusterMessage('');
+    return;
+  }
+
+  clearSearch(false);
+  var results = [];
+  var notFound = 0;
+
+  if(clusterIdQuery){
+    var rId = findClusterById(clusterIdQuery);
+    if(rId){
+      results.push(rId);
+    }else{
+      notFound += 1;
+    }
+  }
+
+  if(clusterOrdenQuery){
+    var rOrden = findClusterByOrden(clusterOrdenQuery);
+    if(rOrden){
+      results.push(rOrden);
+    }else{
+      notFound += 1;
+    }
+  }
+
+  if(concesionQuery){
+    var rCon = findConcesion(concesionQuery);
+    if(rCon){
+      results.push(rCon);
+    }else{
+      notFound += 1;
+    }
+  }
+
+  if(results.length){
+    applySearchResults(results);
+  }
+  if(!results.length || notFound){
+    showClusterMessage('No se encontro data.');
+    return;
+  }
+  showClusterMessage('');
+}
 
 new L.Control.MiniMap(
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'),
@@ -375,6 +740,11 @@ function colorByAdmin(a){
   return adminColorMap[a];
 }
 
+var clusterIndex = {};
+var clusterOrderIndex = {};
+var clusterOrderReverse = {};
+var concesionIndex = {};
+
 //////////////////////////////////////////////////
 // CONCESIONES
 //////////////////////////////////////////////////
@@ -386,7 +756,13 @@ var concesionesLayer = L.geoJSON(null,{
     opacity:0.7
   }),
   onEachFeature:(f,l)=>{
-    l.bindTooltip('<b>Concesión:</b> '+(f.properties.ADM_VALIDO||'-'),{sticky:true});
+    var name = f.properties.ADM_VALIDO || '-';
+    if(!concesionIndex[name]){
+      concesionIndex[name] = [];
+    }
+    concesionIndex[name].push(l);
+    l.bindTooltip('<b>Concesion:</b> '+name,{sticky:true});
+    l.bindPopup('<b>Concesion:</b> '+name);
   }
 }).addTo(map);
 
@@ -422,41 +798,6 @@ var rvnLayer = L.geoJSON(null,{
 fetch('data/rvn.geojson').then(r=>r.json()).then(j=>rvnLayer.addData(j));
 
 //////////////////////////////////////////////////
-// CLUSTERS
-//////////////////////////////////////////////////
-var clusterTotals = {};
-var clusterCounts = {};                 // ← CAMBIO
-var clustersLayer = L.geoJSON(null,{pane:'paneClusters'}).addTo(map);
-
-fetch('data/clusters.geojson').then(r=>r.json()).then(j=>{
-  j.features.forEach(f=>{
-    var id = f.properties.CLUSTER_ID;
-    clusterTotals[id] = (clusterTotals[id]||0) + Number(f.properties.Fallecidos||0);
-    clusterCounts[id] = (clusterCounts[id]||0) + 1;   // ← CAMBIO
-  });
-
-  clustersLayer.options.pointToLayer = (f,ll)=>L.circleMarker(ll,{
-    radius:6,
-    fillColor:colorByFallecidos(clusterTotals[f.properties.CLUSTER_ID]),
-    color:'#111',
-    fillOpacity:0.75
-  });
-
-  clustersLayer.options.onEachFeature = (f,l)=>{
-    var id = f.properties.CLUSTER_ID;
-    l.bindTooltip(
-      '<b>Cluster:</b> '+id+
-      '<br><b>Siniestros:</b> '+clusterCounts[id]+      // ← CAMBIO
-      '<br><b>Fallecidos:</b> '+clusterTotals[id],
-      {sticky:true}
-    );
-  };
-
-  clustersLayer.addData(j);
-  map.fitBounds(clustersLayer.getBounds(),{padding:[20,20]});
-});
-
-//////////////////////////////////////////////////
 // TRAMOS
 //////////////////////////////////////////////////
 var tramosLayer = L.geoJSON(null, {
@@ -468,8 +809,8 @@ var tramosLayer = L.geoJSON(null, {
     l.bindTooltip(
       '<b>Tramo Alta Siniestralidad</b><br>' +
       '<b>Cluster:</b> ' + (f.properties.CLUSTER_ID || '-') + '<br>' +
-      '<b>Siniestros:</b> ' + (f.properties.Siniestros || '-') + '<br>' + // ← CAMBIO
-      '<b>Fallecidos:</b> ' + (f.properties.Fallecidos || '-') + '<br>' + // ← CAMBIO
+      '<b>Siniestros:</b> ' + (f.properties.Siniestros || '-') + '<br>' + // ??? CAMBIO
+      '<b>Fallecidos:</b> ' + (f.properties.Fallecidos || '-') + '<br>' + // ??? CAMBIO
       '<b>Longitud:</b> ' + m + ' m',
       { sticky: true }
     );
@@ -478,7 +819,88 @@ var tramosLayer = L.geoJSON(null, {
 
 fetch('data/tramos-siniestros.geojson')
   .then(r => r.json())
-  .then(j => tramosLayer.addData(j));
+  .then(j => {
+    j.features.forEach(f => {
+      var id = f.properties.CLUSTER_ID;
+      var orden = f.properties.ORDEN_CLUS;
+      if (id != null && orden != null) {
+        var key = String(id);
+        if (clusterOrderIndex[key] == null) {
+          clusterOrderIndex[key] = orden;
+        }
+        if (clusterOrderReverse[orden] == null) {
+          clusterOrderReverse[orden] = key;
+        }
+      }
+    });
+    tramosLayer.addData(j);
+    updateClusterTooltips();
+  });
+
+//////////////////////////////////////////////////
+// CLUSTERS
+//////////////////////////////////////////////////
+var clusterTotals = {};
+var clusterCounts = {};
+var clustersLayer = L.geoJSON(null,{pane:'paneClusters'}).addTo(map);
+
+function clusterTooltipHtml(idKey){
+  var orden = clusterOrderIndex[idKey] || '-';
+  return '<b>ID_Cluster:</b> '+idKey+
+    '<br><b>No. Cluster segun DGL:</b> '+orden+
+    '<br><b>Siniestros:</b> '+clusterCounts[idKey]+
+    '<br><b>Fallecidos:</b> '+clusterTotals[idKey];
+}
+
+function updateClusterTooltips(){
+  clustersLayer.eachLayer(function(l){
+    if(!l.feature || !l.feature.properties){
+      return;
+    }
+    var idKey = String(l.feature.properties.CLUSTER_ID);
+    var html = clusterTooltipHtml(idKey);
+    if(l.getTooltip()){
+      l.setTooltipContent(html);
+    }else{
+      l.bindTooltip(html, {sticky:true});
+    }
+  });
+}
+
+
+fetch('data/clusters.geojson').then(r=>r.json()).then(j=>{
+  j.features.forEach(f=>{
+    var idKey = String(f.properties.CLUSTER_ID);
+    clusterTotals[idKey] = (clusterTotals[idKey]||0) + Number(f.properties.Fallecidos||0);
+    clusterCounts[idKey] = (clusterCounts[idKey]||0) + 1;
+  });
+
+  clustersLayer.options.pointToLayer = (f,ll)=>{
+    var idKey = String(f.properties.CLUSTER_ID);
+    if(!clusterIndex[idKey]){
+      clusterIndex[idKey] = { markers: [], bounds: L.latLngBounds() };
+    }
+    clusterIndex[idKey].bounds.extend(ll);
+
+    var marker = L.circleMarker(ll,{
+      radius:6,
+      fillColor:colorByFallecidos(clusterTotals[idKey]),
+      color:'#111',
+      fillOpacity:0.75
+    });
+    clusterIndex[idKey].markers.push(marker);
+    return marker;
+  };
+
+  clustersLayer.options.onEachFeature = (f,l)=>{
+    var idKey = String(f.properties.CLUSTER_ID);
+    l.bindTooltip(clusterTooltipHtml(idKey), {sticky:true});
+  };
+
+  clustersLayer.addData(j);
+  updateClusterTooltips();
+  map.fitBounds(clustersLayer.getBounds(),{padding:[20,20]});
+});
 
 //////////////////////////////////////////////////
 // CONTROL DE CAPAS (COLAPSABLE)
