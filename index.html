@@ -629,18 +629,49 @@ function findConcesion(query){
     bounds: bounds,
     latlng: anchor,
     html: '<b>Concesion:</b> ' + match,
-    layer: layer
+    layer: layer,
+    name: match
   };
+}
+
+function setClusterFilter(concesionName){
+  activeConcesionFilter = concesionName || null;
+  clustersLayer.eachLayer(function(l){
+    var layerName = '';
+    if(l.feature && l.feature.properties && l.feature.properties.ADM_VALIDO){
+      layerName = String(l.feature.properties.ADM_VALIDO);
+    }
+    var matches = !activeConcesionFilter || layerName === activeConcesionFilter;
+    l.options.interactive = matches;
+    l.setStyle({
+      opacity: matches ? 1 : 0,
+      fillOpacity: matches ? 0.75 : 0
+    });
+    if(matches){
+      if(!l.getTooltip() && l.feature && l.feature.properties){
+        var idKey = String(l.feature.properties.CLUSTER_ID);
+        l.bindTooltip(clusterTooltipHtml(idKey), {sticky:true});
+      }
+    }else{
+      if(l.getTooltip()){
+        l.unbindTooltip();
+      }
+    }
+  });
 }
 
 function clearSearch(clearInputs){
   searchLayer.clearLayers();
   map.closePopup();
   showClusterMessage('');
+  if(!concesionInput.value.trim()){
+    setClusterFilter(null);
+  }
   if(clearInputs){
     clusterIdInput.value = '';
     clusterOrdenInput.value = '';
     concesionInput.value = '';
+    setClusterFilter(null);
   }
 }
 
@@ -657,6 +688,10 @@ function performClusterSearch(){
   clearSearch(false);
   var results = [];
   var notFound = 0;
+
+  if(!concesionQuery){
+    setClusterFilter(null);
+  }
 
   if(clusterIdQuery){
     var rId = findClusterById(clusterIdQuery);
@@ -680,6 +715,7 @@ function performClusterSearch(){
     var rCon = findConcesion(concesionQuery);
     if(rCon){
       results.push(rCon);
+      setClusterFilter(rCon.name);
     }else{
       notFound += 1;
     }
@@ -744,6 +780,7 @@ var clusterIndex = {};
 var clusterOrderIndex = {};
 var clusterOrderReverse = {};
 var concesionIndex = {};
+var activeConcesionFilter = null;
 
 //////////////////////////////////////////////////
 // CONCESIONES
@@ -899,6 +936,9 @@ fetch('data/clusters.geojson').then(r=>r.json()).then(j=>{
 
   clustersLayer.addData(j);
   updateClusterTooltips();
+  if(activeConcesionFilter){
+    setClusterFilter(activeConcesionFilter);
+  }
   map.fitBounds(clustersLayer.getBounds(),{padding:[20,20]});
 });
 
