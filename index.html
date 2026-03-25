@@ -750,8 +750,9 @@ if (window.innerWidth < 768) {
 map.createPane('paneConcesiones');   map.getPane('paneConcesiones').style.zIndex = 200;
 map.createPane('paneDepartamentos'); map.getPane('paneDepartamentos').style.zIndex = 300;
 map.createPane('paneRVN');           map.getPane('paneRVN').style.zIndex = 350;
-map.createPane('paneClusters');      map.getPane('paneClusters').style.zIndex = 450;
+map.createPane('paneClusters');      map.getPane('paneClusters').style.zIndex = 600;
 map.createPane('paneTramos');        map.getPane('paneTramos').style.zIndex = 500;
+map.getPane('paneTramos').style.pointerEvents = 'none'; 
 
 //////////////////////////////////////////////////
 // COLORES
@@ -840,17 +841,41 @@ fetch('data/rvn.geojson').then(r=>r.json()).then(j=>rvnLayer.addData(j));
 var tramosLayer = L.geoJSON(null, {
   pane: 'paneTramos',
   style: { color: '#f4ae18', weight: 5 },
-  onEachFeature: (f, l) => {
-    var m = Number(f.properties.Longitud_m || 0).toFixed(0);
+  interactive: true,
 
-    l.bindTooltip(
-      '<b>Tramo Alta Siniestralidad</b><br>' +
-      '<b>Cluster:</b> ' + (f.properties.CLUSTER_ID || '-') + '<br>' +
-      '<b>Siniestros:</b> ' + (f.properties.Siniestros || '-') + '<br>' + // ??? CAMBIO
-      '<b>Fallecidos:</b> ' + (f.properties.Fallecidos || '-') + '<br>' + // ??? CAMBIO
-      '<b>Longitud:</b> ' + m + ' m',
-      { sticky: true }
-    );
+  onEachFeature: (f, l) => {
+
+    console.log(f.properties); 
+
+    var p = f.properties || {};
+    var m = Number(p.Longitud_m || 0).toFixed(0);
+
+    var htmlTramo = `
+      <div style="min-width:240px">
+
+        <b>🚧 TRAMO DE ALTA SINIESTRALIDAD</b><br><br>
+
+        <b>📍 Cluster:</b> ${p.ORDEN_CLUS ?? '-'}<br>
+        <b>🚧 Siniestros:</b> ${p.Siniestros ?? '-'}<br>
+        <b>💀 Fallecidos:</b> ${p.Fallecidos ?? '-'}<br>
+        <b>🩺 Lesionados:</b> ${p.Lesionados ?? '-'}<br>
+        <b>📏 Longitud:</b> ${m} m<br><br>
+
+        <b>📍 Progresiva</b><br>
+        <b>Inicio:</b> ${p.Progresiva ?? '-'}<br>
+        <b>Final:</b> ${p.Progresi_1 ?? '-'}<br><br>
+
+        <b>🛣 Información vial</b><br>
+        <b>🏢 Administracion:</b> ${p.ADM_VALIDO ?? p.ADMIN ?? '-'}<br>
+        <b>Tramo:</b> ${p.TRAMO ?? '-'}<br>
+        <b>Ruta:</b> ${p.cCodRuta ?? '-'}<br>
+        
+
+      </div>
+    `;
+
+    l.bindTooltip(htmlTramo, { sticky: true });
+    l.bindPopup(htmlTramo);
   }
 });
 
@@ -870,6 +895,16 @@ fetch('data/tramos-siniestros.geojson')
         }
       }
     });
+    // 🔥 EXTRAER DGL DESDE TRAMOS
+    j.features.forEach(f => {
+      var idKey = String(f.properties.CLUSTER_ID);
+
+      if(!clusterDGL[idKey]) clusterDGL[idKey] = new Set();
+
+      if(f.properties.DGL){
+        clusterDGL[idKey].add(f.properties.DGL);
+      }
+    });
     tramosLayer.addData(j);
     updateClusterTooltips();
   });
@@ -879,15 +914,38 @@ fetch('data/tramos-siniestros.geojson')
 //////////////////////////////////////////////////
 var clusterTotals = {};
 var clusterCounts = {};
+var clusterDGL = {};
+var clusterLesionados = {};
+var clusterRutas = {};
+var clusterAdmins = {};
 var clustersLayer = L.geoJSON(null,{pane:'paneClusters'}).addTo(map);
 
 function clusterTooltipHtml(idKey){
+  var dgl = clusterDGL[idKey] ? Array.from(clusterDGL[idKey]).join(', ') : '-';
   var orden = clusterOrderIndex[idKey] || '-';
-  return '<b>ID_Cluster:</b> '+idKey+
-    '<br><b>No. Cluster segun DGL:</b> '+orden+
-    '<br><b>Siniestros:</b> '+clusterCounts[idKey]+
-    '<br><b>Fallecidos:</b> '+clusterTotals[idKey];
-}
+  var fallecidos = clusterTotals[idKey] || 0;
+  var siniestros = clusterCounts[idKey] || 0;
+  var lesionados = clusterLesionados[idKey] || 0;
+
+  // Convertir Set → texto
+  var rutasArr = clusterRutas[idKey] ? Array.from(clusterRutas[idKey]) : [];
+  var rutas = rutasArr.length > 0 ? rutasArr[0] : '-';
+  var admins = clusterAdmins[idKey] ? Array.from(clusterAdmins[idKey]).join(', ') : '-';
+
+  return `
+    <div style="min-width:230px">
+      <b>ℹ️ DETALLE POR CLUSTER</b><br>
+      <b>📍 ID_Cluster:</b> ${idKey}<br>
+      <b>🔢 No. Cluster segun DGL:</b> ${orden}<br>
+      <b>♦️ DGL:</b> ${dgl}<br>
+      <b>🚧 Siniestros:</b> ${siniestros}<br>
+      <b>💀 Fallecidos:</b> ${fallecidos}<br>
+      <b>🩺 Lesionados:</b> ${lesionados}<br>
+      <b>🛣 Cod_Ruta:</b> ${rutas}<br>
+      <b>🏢 Administración:</b> ${admins}
+    </div>
+  `;
+} 
 
 function updateClusterTooltips(){
   clustersLayer.eachLayer(function(l){
@@ -907,10 +965,28 @@ function updateClusterTooltips(){
 
 fetch('data/clusters.geojson').then(r=>r.json()).then(j=>{
   j.features.forEach(f=>{
-    var idKey = String(f.properties.CLUSTER_ID);
-    clusterTotals[idKey] = (clusterTotals[idKey]||0) + Number(f.properties.Fallecidos||0);
-    clusterCounts[idKey] = (clusterCounts[idKey]||0) + 1;
+  var idKey = String(f.properties.CLUSTER_ID);
+
+  // Fallecidos y siniestros (ya tenías)
+  clusterTotals[idKey] = (clusterTotals[idKey]||0) + Number(f.properties.Fallecidos||0);
+  clusterCounts[idKey] = (clusterCounts[idKey]||0) + 1;
+
+  // 🔥 Lesionados
+  clusterLesionados[idKey] = (clusterLesionados[idKey]||0) + Number(f.properties.Lesionados||0);
+
+  // 🔥 Cod_Ruta (pueden ser varios → usamos Set)
+  if(!clusterRutas[idKey]) clusterRutas[idKey] = new Set();
+  if(f.properties.COD_RUTA){
+  clusterRutas[idKey].add(f.properties.COD_RUTA);
+ }
+
+  // 🔥 Administración / Concesión
+  if(!clusterAdmins[idKey]) clusterAdmins[idKey] = new Set();
+  if(f.properties.ADM_VALIDO){
+    clusterAdmins[idKey].add(f.properties.ADM_VALIDO);
+  }
   });
+
 
   clustersLayer.options.pointToLayer = (f,ll)=>{
     var idKey = String(f.properties.CLUSTER_ID);
@@ -930,8 +1006,58 @@ fetch('data/clusters.geojson').then(r=>r.json()).then(j=>{
   };
 
   clustersLayer.options.onEachFeature = (f,l)=>{
-    var idKey = String(f.properties.CLUSTER_ID);
-    l.bindTooltip(clusterTooltipHtml(idKey), {sticky:true});
+  var idKey = String(f.properties.CLUSTER_ID);
+
+  var htmlPunto = `
+    <div style="min-width:260px; max-height:300px; overflow:auto; font-size:12px">
+
+      <b>📍 DETALLE DEL SINIESTRO</b><br><br>
+
+      <b>🆔 ID_Cluster:</b> ${idKey}<br>
+      <b>🚧 COD_ACCIDE:</b> ${f.properties.COD_ACCIDE || '-'}<br>
+      <b>🚌 Administración:</b> ${f.properties.ADM_VALIDO || '-'}<br>
+      <b>📊 Clase Accidente:</b> ${f.properties.ClaseAccid || '-'}<br><br>
+
+      <b>💀 Fallecidos:</b> ${f.properties.Fallecidos || 0}<br>
+      <b>🩺 Lesionados:</b> ${f.properties.Lesionados || 0}<br>
+      <b>🚗 Vehículos dañados:</b> ${f.properties.Vehiculos || '-'}<br><br>
+
+      <b>🌎 Ubicación</b><br>
+      <b>Departamento:</b> ${f.properties.DEPARTAMEN || '-'}<br>
+      <b>Provincia:</b> ${f.properties.PROVINCIA || '-'}<br>
+      <b>Distrito:</b> ${f.properties.DISTRITO || '-'}<br><br>
+
+      <b>🛣 Infraestructura</b><br>
+      <b>Tipo de vía:</b> ${f.properties.TipoDVia || '-'}<br>
+      <b>Código carretera:</b> ${f.properties.CodCarrete || '-'}<br>
+      <b>Red vial:</b> ${f.properties.TipoDeRedV || '-'}<br>
+      <b>Ruta:</b> ${f.properties.COD_RUTA || '-'}<br><br>
+
+      <b>📍 Coordenadas</b><br>
+      <b>Latitud:</b> ${f.properties.y || '-'}<br>
+      <b>longitud:</b> ${f.properties.x || '-'}<br><br>
+
+      <b>🌦 Condiciones</b><br>
+      <b>Clima:</b> ${f.properties.CondClimat || '-'}<br>
+      <b>Zonificación:</b> ${f.properties.Zonificac || '-'}<br><br>
+
+      <b>🛤 Características de vía</b><br>
+      <b>Característica:</b> ${f.properties.Caracteris || '-'}<br>
+      <b>Perfil longitudinal:</b> ${f.properties.PerfLongVi || '-'}<br>
+      <b>Superficie calzada:</b> ${f.properties.SupCalzada || '-'}<br><br>
+
+      <b>⚠️ Causa del siniestro</b><br>
+      <b>Principal:</b> ${f.properties.CausaPrinc || '-'}<br>
+      <b>Específica:</b> ${f.properties.CausaEspec || '-'}<br>
+
+    </div>
+  `;
+
+  // Popup individual
+  l.bindPopup(htmlPunto);
+
+  // (Opcional) tooltip resumen del cluster
+  // l.bindTooltip(clusterTooltipHtml(idKey), {sticky:true});
   };
 
   clustersLayer.addData(j);
@@ -952,6 +1078,24 @@ L.control.layers(null,{
   'Red Vial Nacional':rvnLayer,
   'Departamentos':departamentosLayer
 },{collapsed:true}).addTo(map);
+map.on('overlayadd', function(e) {
+
+  if (e.layer === tramosLayer) {
+    // 🔥 activar interacción de tramos
+    map.getPane('paneTramos').style.pointerEvents = 'auto';
+  }
+
+});
+map.on('overlayremove', function(e) {
+
+  if (e.layer === tramosLayer) {
+    // 🔥 dejar pasar el mouse a clusters
+    map.getPane('paneTramos').style.pointerEvents = 'none';
+  }
+
+});
+
+
 
 //////////////////////////////////////////////////
 // LEYENDA UNIFICADA Y SEGURA
